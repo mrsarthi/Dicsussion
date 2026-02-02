@@ -26,8 +26,13 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
     // Encrypt the message
     const encryptedData = encryptMessage(plainText, recipient.publicKey, myKeys.secretKey);
 
-    // Send via GunDB
-    const messageId = gunService.sendMessage(senderAddress, recipientAddress, encryptedData);
+    // Send via GunDB with sender's public key attached
+    const payload = {
+        ...encryptedData,
+        senderPublicKey: myKeys.publicKey // Attach identity proof
+    };
+
+    const messageId = gunService.sendMessage(senderAddress, recipientAddress, payload);
 
     return {
         id: messageId,
@@ -36,6 +41,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         content: plainText, // Keep plaintext for sender's view
         encrypted: encryptedData.encrypted, // Include for debug view
         nonce: encryptedData.nonce, // Include for debug view
+        senderPublicKey: myKeys.publicKey,
         timestamp: Date.now(),
         status: 'sent',
     };
@@ -52,37 +58,43 @@ export async function decryptReceivedMessage(encryptedMessage) {
         throw new Error('No encryption keys found.');
     }
 
-    // Get sender's public key
-    const sender = await gunService.getUser(encryptedMessage.from);
-    if (!sender || !sender.publicKey) {
+    // Try to get public key from message itself first (new protocol)
+    // If not found, fallback to GunDB lookup (legacy)
+    let senderPublicKey = encryptedMessage.senderPublicKey;
+
+    if (!senderPublicKey) {
+        const sender = await gunService.getUser(encryptedMessage.from);
+        if (sender) senderPublicKey = sender.publicKey;
+    }
+
+    if (!senderPublicKey) {
         return {
             ...encryptedMessage,
             content: '[Unable to decrypt: sender unknown]',
-            decryptionFailed: true,
+            decryptionFailed: true
         };
     }
 
-    // Decrypt
-    const plainText = decryptMessage(
-        encryptedMessage.encrypted,
-        encryptedMessage.nonce,
-        sender.publicKey,
-        myKeys.secretKey
-    );
+    try {
+        const decryptedContent = decryptMessage(
+            { encrypted: encryptedMessage.encrypted, nonce: encryptedMessage.nonce },
+            senderPublicKey,
+            myKeys.secretKey
+        );
 
-    if (plainText === null) {
         return {
             ...encryptedMessage,
-            content: '[Decryption failed]',
-            decryptionFailed: true,
+            content: decryptedContent,
+            decryptionFailed: false
+        };
+    } catch (err) {
+        console.error('Decryption failed:', err);
+        return {
+            ...encryptedMessage,
+            content: '[Decryption Failed]',
+            decryptionFailed: true
         };
     }
-
-    return {
-        ...encryptedMessage,
-        content: plainText,
-        decryptionFailed: false,
-    };
 }
 
 /**

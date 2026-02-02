@@ -133,10 +133,10 @@ export function sendMessage(senderAddress, recipientAddress, encryptedData) {
         to: recipientAddress.toLowerCase(),
         encrypted: encryptedData.encrypted,
         nonce: encryptedData.nonce,
+        senderPublicKey: encryptedData.senderPublicKey,
         timestamp: Date.now(),
     };
 
-    console.log('📤 Sending message to conversation:', conversationId);
     console.log('📤 Sending message to conversation:', conversationId);
     messages.get(conversationId).get(messageId).put(messageData);
 
