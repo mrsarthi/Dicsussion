@@ -2,14 +2,11 @@
 import Gun from 'gun/gun';
 import 'gun/sea';
 
-// Initialize Gun with multiple public relay peers for better connectivity
+// Initialize Gun with custom relay for reliable connectivity
 const gun = Gun({
     peers: [
-        'https://gun-manhattan.herokuapp.com/gun',
-        'https://gun-us.herokuapp.com/gun',
-        'https://gun-eu.herokuapp.com/gun',
-        'https://gun-matrix.herokuapp.com/gun',
-        'https://relay.peer.ooo/gun',
+        'https://lemon-camels-hope.loca.lt/gun', // Custom Localtunnel Relay
+        // 'https://gun-manhattan.herokuapp.com/gun', // Backup public relays
     ],
     localStorage: true,
     radisk: true, // Enable disk storage
