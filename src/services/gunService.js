@@ -5,7 +5,7 @@ import 'gun/sea';
 // Initialize Gun with custom relay for reliable connectivity
 const gun = Gun({
     peers: [
-        'https://lemon-camels-hope.loca.lt/gun', // Custom Localtunnel Relay
+        'https://29c65417e4ad25f2-182-69-176-69.serveousercontent.com/gun', // Custom Serveo Relay
         // 'https://gun-manhattan.herokuapp.com/gun', // Backup public relays
     ],
     localStorage: true,
