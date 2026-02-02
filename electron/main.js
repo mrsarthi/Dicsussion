@@ -149,6 +149,12 @@ ipcMain.handle('get-stored-auth', async () => {
     return null;
 });
 
+ipcMain.handle('flash-frame', (event, flag) => {
+    if (mainWindow) {
+        mainWindow.flashFrame(flag);
+    }
+});
+
 // Performance optimizations
 app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer');
 app.commandLine.appendSwitch('enable-gpu-rasterization');

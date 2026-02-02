@@ -62,6 +62,10 @@ export function useChat(myAddress) {
                                     body: msg.content,
                                     icon: '/icon.png'
                                 });
+                                // Flash taskbar if in Electron
+                                if (window.electronAPI?.flashFrame) {
+                                    window.electronAPI.flashFrame(true);
+                                }
                             }
                         }
                     }
@@ -72,6 +76,17 @@ export function useChat(myAddress) {
             }
         });
     }, [contacts, activeChat, myAddress]);
+
+    // Stop flashing on focus
+    useEffect(() => {
+        const handleFocus = () => {
+            if (window.electronAPI?.flashFrame) {
+                window.electronAPI.flashFrame(false);
+            }
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, []);
 
     // Update presence and subscribe to chats periodically
     useEffect(() => {
@@ -156,6 +171,10 @@ export function useChat(myAddress) {
                                     body: newMessage.content,
                                     icon: '/icon.png' // Optional
                                 });
+                                // Flash taskbar if in Electron
+                                if (window.electronAPI?.flashFrame) {
+                                    window.electronAPI.flashFrame(true);
+                                }
                             }
                         }
 

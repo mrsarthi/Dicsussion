@@ -15,4 +15,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Check if running in Electron
     isElectron: true,
+
+    // Flash taskbar
+    flashFrame: (flag) => ipcRenderer.invoke('flash-frame', flag),
 });

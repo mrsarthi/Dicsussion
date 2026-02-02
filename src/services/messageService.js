@@ -59,12 +59,23 @@ export async function decryptReceivedMessage(encryptedMessage) {
     }
 
     // Try to get public key from message itself first (new protocol)
-    // If not found, fallback to GunDB lookup (legacy)
     let senderPublicKey = encryptedMessage.senderPublicKey;
 
     if (!senderPublicKey) {
         const sender = await gunService.getUser(encryptedMessage.from);
         if (sender) senderPublicKey = sender.publicKey;
+    }
+
+    // SPECIAL CASE: If I am the sender, I need to use the RECIPIENT'S public key 
+    // to derive the shared secret, because nacl.box is commutative.
+    // Shared Key = Box(MyPriv, TheirPub) == Box(TheirPriv, MyPub)
+    // When I sent it, I used Box(MyPriv, TheirPub).
+    // Now I am decrypting it.
+    if (encryptedMessage.from.toLowerCase() === myKeys.address.toLowerCase()) {
+        const recipient = await gunService.getUser(encryptedMessage.to);
+        if (recipient) {
+            senderPublicKey = recipient.publicKey;
+        }
     }
 
     if (!senderPublicKey) {
@@ -89,6 +100,9 @@ export async function decryptReceivedMessage(encryptedMessage) {
             decryptionFailed: false
         };
     } catch (err) {
+        // If decryption fails for self-message, it might be because we don't have the right key pair anymore
+        // or the message was strictly encrypted for the recipient only (if ephemeral keys used)
+        // But with standard Nacl Box, it should work.
         console.error('Decryption failed:', err);
         return {
             ...encryptedMessage,
