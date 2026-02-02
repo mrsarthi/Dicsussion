@@ -1,3 +1,11 @@
+# Test scripts
+check-relays.js
+relay-server.js
+
+# Electron build output
+release/
+electron/dist/
+
 # Logs
 logs
 *.log
