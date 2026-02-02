@@ -67,15 +67,21 @@ export async function decryptReceivedMessage(encryptedMessage) {
     }
 
     // SPECIAL CASE: If I am the sender, I need to use the RECIPIENT'S public key 
-    // to derive the shared secret, because nacl.box is commutative.
-    // Shared Key = Box(MyPriv, TheirPub) == Box(TheirPriv, MyPub)
-    // When I sent it, I used Box(MyPriv, TheirPub).
-    // Now I am decrypting it.
+    // to derive the shared secret.
     if (encryptedMessage.from.toLowerCase() === myKeys.address.toLowerCase()) {
         const recipient = await gunService.getUser(encryptedMessage.to);
         if (recipient) {
             senderPublicKey = recipient.publicKey;
         }
+    }
+
+    // HANDLE PARTIAL UPDATES (Status changes)
+    // If message has no encrypted content (just status update), return as is
+    if (!encryptedMessage.encrypted && encryptedMessage.status) {
+        return {
+            ...encryptedMessage,
+            decryptionFailed: false // It's just a status update
+        };
     }
 
     if (!senderPublicKey) {
@@ -135,13 +141,21 @@ export async function startConversation(myAddress, theirAddress, onMessage) {
         decryptedMessages.push(decrypted);
     }
 
-    // Track seen message IDs
+    // Track seen message IDs to distinguish NEW messages from duplicates
+    // But we MUST allow updates to seen messages (e.g. status changes)
     const seenIds = new Set(decryptedMessages.map(m => m.id));
 
     // Subscribe to new messages
     const subscription = gunService.subscribeToConversation(myAddress, theirAddress, async (msg) => {
+        // If it's a NEW message
         if (!seenIds.has(msg.id)) {
             seenIds.add(msg.id);
+            const decrypted = await decryptReceivedMessage(msg);
+            onMessage(decrypted);
+        } else {
+            // It's an UPDATE (e.g. status change)
+            // Even if we've seen it, pass it through so UI can update status
+            // For updates, we might receive partial data, so decryptReceivedMessage needs to handle that (added above)
             const decrypted = await decryptReceivedMessage(msg);
             onMessage(decrypted);
         }
