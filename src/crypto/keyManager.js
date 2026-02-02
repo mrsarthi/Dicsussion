@@ -74,3 +74,25 @@ export async function hasStoredKeys() {
     const keys = await keyStore.getItem(KEY_STORAGE_KEY);
     return keys !== null;
 }
+
+/**
+ * Store keys derived from a signature (for Electron hybrid auth)
+ * @param {string} walletAddress - The Ethereum wallet address
+ * @param {string} signature - The signature from browser auth
+ * @returns {Promise<Object>} { publicKey, secretKey, address }
+ */
+export async function storeKeysFromSignature(walletAddress, signature) {
+    const keys = deriveKeysFromSignature(signature);
+
+    // Add address to keys object for later reference
+    const keysWithAddress = {
+        ...keys,
+        address: walletAddress,
+    };
+
+    // Store keys locally
+    await keyStore.setItem(WALLET_ADDRESS_KEY, walletAddress);
+    await keyStore.setItem(KEY_STORAGE_KEY, keysWithAddress);
+
+    return keysWithAddress;
+}

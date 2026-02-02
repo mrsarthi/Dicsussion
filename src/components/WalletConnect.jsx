@@ -1,5 +1,5 @@
 // WalletConnect Component - Premium wallet connection UI
-import { useWallet } from '../hooks/useWallet';
+import { useWallet } from '../context/WalletContext';
 import './WalletConnect.css';
 
 export function WalletConnect() {
@@ -10,6 +10,7 @@ export function WalletConnect() {
         isConnected,
         error,
         isWeb3Detected,
+        isElectron,
         connect,
         disconnect,
     } = useWallet();
@@ -71,12 +72,12 @@ export function WalletConnect() {
                         {isConnecting ? (
                             <>
                                 <span className="spinner"></span>
-                                Connecting...
+                                {isElectron ? 'Waiting for browser...' : 'Connecting...'}
                             </>
                         ) : (
                             <>
                                 <span>🦊</span>
-                                Connect with MetaMask
+                                {isElectron ? 'Open Browser to Connect' : 'Connect with MetaMask'}
                             </>
                         )}
                     </button>

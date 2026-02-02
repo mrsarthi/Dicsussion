@@ -1,10 +1,10 @@
 // App.jsx - Main Application Component
+import { WalletProvider, useWallet } from './context/WalletContext';
 import { WalletConnect } from './components/WalletConnect';
 import { ChatInterface } from './components/ChatInterface';
-import { useWallet } from './hooks/useWallet';
 import './styles/index.css';
 
-function App() {
+function AppContent() {
   const { address, isConnected } = useWallet();
 
   return (
@@ -18,6 +18,14 @@ function App() {
         </>
       )}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <WalletProvider>
+      <AppContent />
+    </WalletProvider>
   );
 }
 

@@ -34,6 +34,8 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         from: senderAddress,
         to: recipientAddress,
         content: plainText, // Keep plaintext for sender's view
+        encrypted: encryptedData.encrypted, // Include for debug view
+        nonce: encryptedData.nonce, // Include for debug view
         timestamp: Date.now(),
         status: 'sent',
     };
