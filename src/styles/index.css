@@ -347,3 +347,15 @@ body {
 .p-lg { padding: var(--space-lg); }
 .mt-md { margin-top: var(--space-md); }
 .mb-md { margin-bottom: var(--space-md); }
+
+/* Message Status Ticks */
+.message-status {
+  font-size: 0.8rem;
+  margin-left: 4px;
+  color: var(--text-muted); /* Grey by default (Sent/Delivered) */
+  font-weight: bold;
+}
+
+.message-status.read {
+  color: #3b82f6; /* Blue */
+}

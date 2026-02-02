@@ -224,6 +224,11 @@ export function ChatInterface({ walletAddress }) {
                                                         🔒
                                                     </span>
                                                 )}
+                                                {msg.from?.toLowerCase() === walletAddress?.toLowerCase() && (
+                                                    <span className={`message-status ${msg.status || 'sent'}`} title={msg.status}>
+                                                        {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

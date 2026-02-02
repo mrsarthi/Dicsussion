@@ -163,6 +163,17 @@ export function sendMessage(senderAddress, recipientAddress, encryptedData) {
 }
 
 /**
+ * Update message status (delivered/read)
+ * @param {string} conversationId 
+ * @param {string} messageId 
+ * @param {string} status - 'delivered' | 'read'
+ */
+export function updateMessageStatus(conversationId, messageId, status) {
+    if (!conversationId || !messageId) return;
+    messages.get(conversationId).get(messageId).get('status').put(status);
+}
+
+/**
  * Subscribe to user's active chats list
  * @param {string} myAddress 
  * @param {Function} callback 

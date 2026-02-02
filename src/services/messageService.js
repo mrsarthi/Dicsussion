@@ -159,3 +159,25 @@ export async function searchUser(query) {
 
     return null;
 }
+
+/**
+ * Mark a message as delivered
+ * @param {string} senderAddress 
+ * @param {string} recipientAddress 
+ * @param {string} messageId 
+ */
+export function markMessageAsDelivered(senderAddress, recipientAddress, messageId) {
+    const conversationId = gunService.getConversationId(senderAddress, recipientAddress);
+    gunService.updateMessageStatus(conversationId, messageId, 'delivered');
+}
+
+/**
+ * Mark a message as read
+ * @param {string} senderAddress 
+ * @param {string} recipientAddress 
+ * @param {string} messageId 
+ */
+export function markMessageAsRead(senderAddress, recipientAddress, messageId) {
+    const conversationId = gunService.getConversationId(senderAddress, recipientAddress);
+    gunService.updateMessageStatus(conversationId, messageId, 'read');
+}
