@@ -77,7 +77,8 @@ export async function decryptReceivedMessage(encryptedMessage) {
 
     try {
         const decryptedContent = decryptMessage(
-            { encrypted: encryptedMessage.encrypted, nonce: encryptedMessage.nonce },
+            encryptedMessage.encrypted,
+            encryptedMessage.nonce,
             senderPublicKey,
             myKeys.secretKey
         );
