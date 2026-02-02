@@ -2,18 +2,22 @@
 import Gun from 'gun/gun';
 import 'gun/sea';
 
-// Initialize Gun with public relay peers
+// Initialize Gun with multiple public relay peers for better connectivity
 const gun = Gun({
     peers: [
         'https://gun-manhattan.herokuapp.com/gun',
         'https://gun-us.herokuapp.com/gun',
+        'https://gun-eu.herokuapp.com/gun',
+        'https://gun-matrix.herokuapp.com/gun',
+        'https://relay.peer.ooo/gun',
     ],
     localStorage: true,
+    radisk: true, // Enable disk storage
 });
 
 // Get the root user graph
-const users = gun.get('decentrachat_users');
-const messages = gun.get('decentrachat_messages');
+const users = gun.get('decentrachat_users_v2'); // Use v2 to avoid stale data
+const messages = gun.get('decentrachat_messages_v2');
 
 /**
  * Register a user's public key on the network
@@ -30,25 +34,65 @@ export function registerUser(address, publicKey, username = null) {
         lastSeen: Date.now(),
     };
 
-    users.get(address.toLowerCase()).put(userData);
+    // Put data multiple times to ensure sync across peers
+    const userRef = users.get(address.toLowerCase());
+    userRef.put(userData);
+
+    // Force sync after a delay
+    setTimeout(() => {
+        userRef.put({ lastSeen: Date.now() });
+    }, 1000);
 
     if (username) {
-        gun.get('decentrachat_usernames').get(username.toLowerCase()).put({
+        gun.get('decentrachat_usernames_v2').get(username.toLowerCase()).put({
             address: address.toLowerCase(),
         });
     }
+
+    console.log('User registered:', address.toLowerCase());
 }
 
 /**
- * Get a user's public key by address
+ * Get a user's public key by address with retry logic
  * @param {string} address - Ethereum address
  * @returns {Promise<Object|null>}
  */
 export function getUser(address) {
     return new Promise((resolve) => {
-        users.get(address.toLowerCase()).once((data) => {
-            resolve(data || null);
-        });
+        const normalizedAddress = address.toLowerCase();
+        let resolved = false;
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        const tryFetch = () => {
+            attempts++;
+            users.get(normalizedAddress).once((data) => {
+                if (!resolved) {
+                    if (data && data.publicKey) {
+                        resolved = true;
+                        console.log('User found:', normalizedAddress);
+                        resolve(data);
+                    } else if (attempts < maxAttempts) {
+                        // Retry after delay
+                        setTimeout(tryFetch, 500);
+                    } else {
+                        resolved = true;
+                        console.log('User not found after retries:', normalizedAddress);
+                        resolve(null);
+                    }
+                }
+            });
+        };
+
+        tryFetch();
+
+        // Timeout fallback
+        setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                resolve(null);
+            }
+        }, 5000);
     });
 }
 
@@ -95,12 +139,43 @@ export function sendMessage(senderAddress, recipientAddress, encryptedData) {
         timestamp: Date.now(),
     };
 
+    console.log('📤 Sending message to conversation:', conversationId);
+    console.log('📤 Sending message to conversation:', conversationId);
     messages.get(conversationId).get(messageId).put(messageData);
 
     // Update last seen
     users.get(senderAddress.toLowerCase()).get('lastSeen').put(Date.now());
 
+    // Add to both users' chat list with timestamp
+    const chatInfo = {
+        lastMessageAt: Date.now(),
+        with: recipientAddress.toLowerCase()
+    };
+
+    // Add to sender's chat list
+    gun.get('user_chats_v2').get(senderAddress.toLowerCase()).get(recipientAddress.toLowerCase()).put(chatInfo);
+
+    // Add to recipient's chat list
+    const recipientChatInfo = {
+        lastMessageAt: Date.now(),
+        with: senderAddress.toLowerCase()
+    };
+    gun.get('user_chats_v2').get(recipientAddress.toLowerCase()).get(senderAddress.toLowerCase()).put(recipientChatInfo);
+
     return messageId;
+}
+
+/**
+ * Subscribe to user's active chats list
+ * @param {string} myAddress 
+ * @param {Function} callback 
+ */
+export function subscribeToUserChats(myAddress, callback) {
+    return gun.get('user_chats_v2').get(myAddress.toLowerCase()).map().on((data, key) => {
+        if (data && key !== '_' && data.with) {
+            callback(data);
+        }
+    });
 }
 
 /**
@@ -112,9 +187,11 @@ export function sendMessage(senderAddress, recipientAddress, encryptedData) {
  */
 export function subscribeToConversation(addr1, addr2, callback) {
     const conversationId = getConversationId(addr1, addr2);
+    console.log('👂 Subscribing to conversation:', conversationId);
 
     const subscription = messages.get(conversationId).map().on((data, key) => {
         if (data && key !== '_') {
+            console.log('📩 Received message:', data.id, 'from:', data.from?.slice(0, 10));
             callback(data);
         }
     });

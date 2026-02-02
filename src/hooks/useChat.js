@@ -1,7 +1,7 @@
 // useChat Hook - Manage chat conversations
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { sendEncryptedMessage, startConversation, searchUser } from '../services/messageService';
-import { updatePresence } from '../services/gunService';
+import { updatePresence, subscribeToUserChats } from '../services/gunService';
 
 export function useChat(myAddress) {
     const [activeChat, setActiveChat] = useState(null);
@@ -11,14 +11,33 @@ export function useChat(myAddress) {
     const [contacts, setContacts] = useState([]);
     const subscriptionRef = useRef(null);
 
-    // Update presence periodically
+    // Update presence and subscribe to chats periodically
     useEffect(() => {
         if (myAddress) {
             updatePresence(myAddress);
+
+            // Subscribe to my chat list
+            const chatsSub = subscribeToUserChats(myAddress, async (chatInfo) => {
+                const alreadyExists = contacts.some(c => c.address.toLowerCase() === chatInfo.with.toLowerCase());
+
+                if (!alreadyExists) {
+                    // Fetch user info for this chat
+                    const userInfo = await searchUser(chatInfo.with);
+                    setContacts(prev => {
+                        if (prev.some(c => c.address.toLowerCase() === chatInfo.with.toLowerCase())) return prev;
+                        return [...prev, { address: chatInfo.with, ...userInfo }];
+                    });
+                }
+            });
+
             const interval = setInterval(() => {
                 updatePresence(myAddress);
             }, 30000);
-            return () => clearInterval(interval);
+
+            return () => {
+                clearInterval(interval);
+                chatsSub.off();
+            };
         }
     }, [myAddress]);
 

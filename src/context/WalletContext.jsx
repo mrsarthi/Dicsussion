@@ -119,6 +119,8 @@ export function WalletProvider({ children }) {
                 setKeys(encryptionKeys);
 
                 registerUser(walletAddress, encryptionKeys.publicKey);
+                console.log('✅ User registered:', walletAddress);
+                console.log('📢 Public key:', encryptionKeys.publicKey.slice(0, 20) + '...');
 
                 setIsConnected(true);
                 setIsConnecting(false);

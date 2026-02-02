@@ -21,7 +21,14 @@ export async function connectWallet() {
         throw new Error('No Ethereum wallet detected. Please install MetaMask!');
     }
 
-    // Request account access
+    // Force account selection popup by requesting permissions
+    // This makes MetaMask show the account picker every time
+    await window.ethereum.request({
+        method: 'wallet_requestPermissions',
+        params: [{ eth_accounts: {} }]
+    });
+
+    // Now get the selected account
     await window.ethereum.request({ method: 'eth_requestAccounts' });
 
     provider = new BrowserProvider(window.ethereum);

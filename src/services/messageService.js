@@ -20,7 +20,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
     // Get recipient's public key
     const recipient = await gunService.getUser(recipientAddress);
     if (!recipient || !recipient.publicKey) {
-        throw new Error('Recipient not found or has no public key registered.');
+        throw new Error('Waiting for recipient to come online. Their public key is not yet synced. They need to connect to DecentraChat first.');
     }
 
     // Encrypt the message
@@ -93,11 +93,11 @@ export async function decryptReceivedMessage(encryptedMessage) {
  * @returns {Object} Conversation controller
  */
 export async function startConversation(myAddress, theirAddress, onMessage) {
-    // Check if the user exists
+    // Try to get their info, but don't require it
+    // They might not be registered yet, but we can still start a chat
     const theirInfo = await gunService.getUser(theirAddress);
-    if (!theirInfo) {
-        throw new Error('User not found on the network.');
-    }
+
+    // If not found, we'll create a placeholder - messages will sync when they join
 
     // Load existing messages
     const existingMessages = await gunService.getConversationMessages(myAddress, theirAddress);
