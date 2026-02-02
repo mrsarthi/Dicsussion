@@ -63,6 +63,11 @@ export function WalletProvider({ children }) {
             setKeys(storedKeys);
             setAddress(storedKeys.address);
             setIsConnected(true);
+
+            // Force presence re-registration on sync
+            // This ensures our public key is broadcast to the new relay
+            registerUser(storedKeys.address, storedKeys.publicKey);
+            console.log('🔄 Re-registered presence for:', storedKeys.address);
         }
     };
 
@@ -74,6 +79,10 @@ export function WalletProvider({ children }) {
             if (storedKeys) {
                 setKeys(storedKeys);
                 setIsConnected(true);
+
+                // Force presence re-registration in browser too
+                registerUser(existingAddress, storedKeys.publicKey);
+                console.log('🔄 Re-registered presence for:', existingAddress);
             }
         }
     };
