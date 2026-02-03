@@ -5,8 +5,9 @@ import 'gun/sea';
 // Initialize Gun with custom relay for reliable connectivity
 const gun = Gun({
     peers: [
-        'https://29c65417e4ad25f2-182-69-176-69.serveousercontent.com/gun', // Custom Serveo Relay
-        // 'https://gun-manhattan.herokuapp.com/gun', // Backup public relays
+        'https://gun-manhattan.herokuapp.com/gun',
+        'https://gun-us.herokuapp.com/gun',
+        'https://gun-eu.herokuapp.com/gun'
     ],
     localStorage: true,
     radisk: true, // Enable disk storage
@@ -15,6 +16,7 @@ const gun = Gun({
 // Get the root user graph
 const users = gun.get('decentrachat_users_v2'); // Use v2 to avoid stale data
 const messages = gun.get('decentrachat_messages_v2');
+const signals = gun.get('decentrachat_signals_v2');
 
 /**
  * Register a user's public key on the network
@@ -253,6 +255,54 @@ export function subscribeToPresence(address, callback) {
     users.get(address.toLowerCase()).get('lastSeen').on((lastSeen) => {
         const isOnline = lastSeen && (Date.now() - lastSeen < 60000); // Online if seen in last minute
         callback(isOnline, lastSeen);
+    });
+}
+
+/**
+ * Send WebRTC signal via Gun
+ * @param {string} toAddress 
+ * @param {Object} signal 
+ */
+export function sendSignal(toAddress, signal) {
+    const signalId = `sig_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const myAddress = localStorage.getItem('decentrachat_address'); // or pass it in
+
+    // We can't easily get "myAddress" here without passing it, 
+    // but the caller usually knows who they are.
+    // Ideally update sendSignal signature to (from, to, signal)
+    // For now let's assume the signal object has 'from' or we update signature.
+}
+
+/**
+ * Send WebRTC signal via Gun (Corrected)
+ * @param {string} fromAddress
+ * @param {string} toAddress
+ * @param {Object} signal
+ */
+export function sendSignalV2(fromAddress, toAddress, signal) {
+    const signalData = {
+        signal,
+        from: fromAddress.toLowerCase(),
+        timestamp: Date.now()
+    };
+
+    // Put to the recipient's signal graph
+    signals.get(toAddress.toLowerCase()).set(signalData);
+}
+
+/**
+ * Subscribe to incoming signals
+ * @param {string} myAddress
+ * @param {Function} callback
+ */
+export function subscribeToSignals(myAddress, callback) {
+    // Only process recent signals (last 10 seconds) to avoid processing old logic
+    const startTime = Date.now() - 10000;
+
+    signals.get(myAddress.toLowerCase()).map().on((data, key) => {
+        if (data && data.timestamp > startTime) {
+            callback(data);
+        }
     });
 }
 

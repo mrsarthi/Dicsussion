@@ -12,6 +12,7 @@ export function ChatInterface({ walletAddress }) {
         isLoading,
         error,
         connectionType,
+        serverConnected,
         openChat,
         closeChat,
         sendMessage,
@@ -71,6 +72,11 @@ export function ChatInterface({ walletAddress }) {
             <aside className="sidebar glass-card">
                 <div className="sidebar-header">
                     <h2>Chats</h2>
+                    {!serverConnected && (
+                        <div className="connection-status-banner offline">
+                            ⚠️ Disconnected
+                        </div>
+                    )}
                 </div>
 
                 {/* Search / New Chat */}

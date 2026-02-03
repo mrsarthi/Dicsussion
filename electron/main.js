@@ -1,6 +1,7 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling
 try {
@@ -36,7 +37,10 @@ function createAuthServer() {
             return;
         }
 
-        if (req.method === 'POST' && req.url === '/auth-callback') {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const pathname = url.pathname;
+
+        if (req.method === 'POST' && pathname === '/auth-callback') {
             let body = '';
             req.on('data', chunk => {
                 body += chunk.toString();
@@ -64,6 +68,43 @@ function createAuthServer() {
                     res.end(JSON.stringify({ error: 'Invalid request' }));
                 }
             });
+        } else if (req.method === 'GET') {
+            // Serve static files for auth flow to work with MetaMask (no file:// protocol)
+            let filePath = pathname;
+            if (filePath === '/' || filePath === '/auth') {
+                filePath = '/auth.html';
+            }
+
+            // Secure path resolution
+            const safeSuffix = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
+            const targetPath = path.join(__dirname, '../dist', safeSuffix);
+
+            // Ensure we are strictly within dist
+            if (!targetPath.startsWith(path.join(__dirname, '../dist'))) {
+                res.writeHead(403);
+                res.end('Forbidden');
+                return;
+            }
+
+            fs.readFile(targetPath, (err, data) => {
+                if (err) {
+                    res.writeHead(404);
+                    res.end('Not Found');
+                    return;
+                }
+
+                const ext = path.extname(targetPath).toLowerCase();
+                const mimeTypes = {
+                    '.html': 'text/html',
+                    '.js': 'text/javascript',
+                    '.css': 'text/css',
+                    '.png': 'image/png',
+                    '.svg': 'image/svg+xml'
+                };
+
+                res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+                res.end(data);
+            });
         } else {
             res.writeHead(404);
             res.end();
@@ -72,6 +113,18 @@ function createAuthServer() {
 
     authServer.listen(AUTH_PORT, '127.0.0.1', () => {
         console.log(`Auth server running on port ${AUTH_PORT}`);
+    });
+
+    authServer.on('error', (e) => {
+        if (e.code === 'EADDRINUSE') {
+            console.log('Address in use, retrying...');
+            // Optional: retry logic or just log it. Since we have single instance lock, 
+            // this usually means a zombie process or another app.
+            // We won't crash the app for this anymore.
+            console.error(`Port ${AUTH_PORT} is busy. Auth server failed to start.`);
+        } else {
+            console.error('Auth server error:', e);
+        }
     });
 }
 
@@ -89,7 +142,7 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: true,
+            webSecurity: false, // Disabled to allow loading local resources from file://
             preload: path.join(__dirname, 'preload.js'),
         },
     });
@@ -98,12 +151,16 @@ function createWindow() {
     if (isDev) {
         mainWindow.loadURL('http://localhost:5173');
     } else {
-        mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+        const indexPath = path.join(__dirname, '../dist/index.html');
+        console.log('Loading production index from:', indexPath);
+        mainWindow.loadFile(indexPath).catch(e => console.error('Failed to load file:', e));
     }
 
     // Show window when ready
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
+        // Open DevTools to debug black screen issues
+        mainWindow.webContents.openDevTools();
     });
 
     // Handle external links
@@ -125,8 +182,8 @@ ipcMain.handle('open-auth-browser', async () => {
     if (isDev) {
         authUrl = `http://localhost:5173/auth.html?nonce=${nonce}`;
     } else {
-        // In production, serve from file protocol
-        authUrl = `file://${path.join(__dirname, '../dist/auth.html')}?nonce=${nonce}`;
+        // In production, serve from local server to support MetaMask
+        authUrl = `http://127.0.0.1:${AUTH_PORT}/auth.html?nonce=${nonce}`;
     }
 
     shell.openExternal(authUrl);
@@ -162,7 +219,28 @@ app.commandLine.appendSwitch('enable-zero-copy');
 
 // Create window when ready
 app.whenReady().then(() => {
-    createAuthServer();
+    // Single Instance Lock
+    const gotTheLock = app.requestSingleInstanceLock();
+
+    if (!gotTheLock) {
+        app.quit();
+        return;
+    }
+
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+        // Someone tried to run a second instance, we should focus our window.
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+    });
+
+    try {
+        createAuthServer();
+    } catch (err) {
+        console.error('Failed to create auth server:', err);
+    }
+
     createWindow();
 
     app.on('activate', () => {

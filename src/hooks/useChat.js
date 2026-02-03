@@ -13,6 +13,7 @@ import {
     sendDeliveryReceipt,
     sendReadReceipt,
     onMessageReceipt,
+    onConnectionChange,
 } from '../services/messageService';
 import { getStoredKeys } from '../crypto/keyManager';
 
@@ -31,6 +32,7 @@ export function useChat(myAddress) {
         }
     });
     const [connectionType, setConnectionType] = useState('offline');
+    const [serverConnected, setServerConnected] = useState(false);
     const keysRef = useRef(null);
     const initializedRef = useRef(false);
     const activeChatRef = useRef(null);
@@ -128,6 +130,14 @@ export function useChat(myAddress) {
                 setMessages(prev => prev.map(m =>
                     m.id === messageId ? { ...m, status: type } : m
                 ));
+            });
+
+            // Subscribe to connection changes
+            onConnectionChange((isConnected) => {
+                setServerConnected(isConnected);
+                if (!isConnected) {
+                    setConnectionType('offline');
+                }
             });
 
             initializedRef.current = true;
@@ -302,7 +312,9 @@ export function useChat(myAddress) {
         contacts,
         isLoading,
         error,
+        error,
         connectionType, // 'p2p' | 'relay' | 'offline'
+        serverConnected,
         openChat,
         closeChat,
         sendMessage,

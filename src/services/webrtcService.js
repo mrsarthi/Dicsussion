@@ -1,5 +1,6 @@
 // WebRTC Service - P2P peer connection management
 import * as socketService from './socketService';
+import * as gunService from './gunService';
 
 // SimplePeer will be loaded dynamically
 let SimplePeer = null;
@@ -36,6 +37,16 @@ export async function init() {
     }
 
     // Listen for incoming signals from socket service
+    // Listen for incoming signals from GunDB (fallback/primary now that server is down)
+    // We need my address to subscribe
+    const myAddress = localStorage.getItem('decentrachat_address');
+    if (myAddress) {
+        gunService.subscribeToSignals(myAddress, ({ from, signal }) => {
+            handleIncomingSignal(from, signal);
+        });
+    }
+
+    // Still listen to socket just in case it comes back up
     socketService.onSignal(({ from, signal }) => {
         handleIncomingSignal(from, signal);
     });
@@ -84,8 +95,17 @@ function createPeer(peerAddress, initiator) {
     });
 
     // Send signals to the other peer via signaling server
+    // Send signals to the other peer via GunDB (Relay)
     peer.on('signal', (signal) => {
-        socketService.sendSignal(peerAddress, signal);
+        // We need 'from' address. Assuming it's stored in localStorage
+        const myAddress = localStorage.getItem('decentrachat_address');
+        if (myAddress) {
+            gunService.sendSignalV2(myAddress, peerAddress, signal);
+        }
+        // Also try socket if connected
+        if (socketService.isConnected()) {
+            socketService.sendSignal(peerAddress, signal);
+        }
     });
 
     // Connection established

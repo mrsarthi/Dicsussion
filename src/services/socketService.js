@@ -1,13 +1,14 @@
 // Socket.IO Service - Connection to signaling server
 import { io } from 'socket.io-client';
 
-// Server URL - change this after deploying to Render
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+// Deployed server URL - uses Render.com
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'https://decentrachat-singnalling.onrender.com';
 
 let socket = null;
 let messageCallback = null;
 let signalCallback = null;
 let receiptCallback = null;
+let connectionChangeCallback = null;
 
 /**
  * Initialize socket connection
@@ -24,10 +25,12 @@ export function initSocket() {
 
     socket.on('connect', () => {
         console.log('🔌 Connected to signaling server');
+        if (connectionChangeCallback) connectionChangeCallback(true);
     });
 
     socket.on('disconnect', () => {
         console.log('❌ Disconnected from signaling server');
+        if (connectionChangeCallback) connectionChangeCallback(false);
     });
 
     socket.on('connect_error', (error) => {
@@ -161,6 +164,14 @@ export function onSignal(callback) {
  */
 export function onReceipt(callback) {
     receiptCallback = callback;
+}
+
+/**
+ * Subscribe to connection status changes
+ * @param {Function} callback 
+ */
+export function onConnectionChange(callback) {
+    connectionChangeCallback = callback;
 }
 
 /**

@@ -235,13 +235,48 @@
             }
         }
 
-        // Auto-check MetaMask
-        if (typeof window.ethereum !== 'undefined') {
-            showStatus('MetaMask detected! Click to connect.', 'info');
-        } else {
-            showStatus('Please install MetaMask extension to continue.', 'error');
-            connectBtn.disabled = true;
+        // Robust MetaMask detection
+        function detectMetaMask() {
+            return new Promise((resolve) => {
+                if (window.ethereum) {
+                    return resolve(true);
+                }
+
+                // Listen for injection event
+                window.addEventListener('ethereum#initialized', () => {
+                    resolve(true);
+                }, { once: true });
+
+                // Poll for a few seconds
+                let retries = 0;
+                const interval = setInterval(() => {
+                    retries++;
+                    if (window.ethereum) {
+                        clearInterval(interval);
+                        resolve(true);
+                    }
+                    if (retries > 10) { // 2 seconds max
+                        clearInterval(interval);
+                        resolve(false);
+                    }
+                }, 200);
+            });
         }
+
+        async function init() {
+            showStatus('Checking for MetaMask...', 'info');
+            const isInstalled = await detectMetaMask();
+
+            if (isInstalled) {
+                showStatus('MetaMask detected! Click to connect.', 'info');
+                connectBtn.disabled = false;
+            } else {
+                showStatus('Please install MetaMask extension to continue.', 'error');
+                connectBtn.disabled = true;
+            }
+        }
+
+        init();
     </script>
 </body>
 

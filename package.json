@@ -12,13 +12,14 @@
     "preview": "vite preview",
     "electron": "electron .",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "vite build && electron-builder",
+    "electron:build": "node build-dist.js",
     "electron:pack": "electron-builder --dir",
-    "dist": "vite build && electron-builder"
+    "dist": "node build-dist.js"
   },
   "build": {
     "appId": "com.decentrachat.app",
     "productName": "DecentraChat",
+    "asar": false,
     "directories": {
       "output": "release"
     },
@@ -27,7 +28,7 @@
       "electron/**/*"
     ],
     "win": {
-      "target": "nsis",
+      "target": "zip",
       "icon": "public/icon.ico"
     },
     "mac": {
@@ -49,10 +50,12 @@
     "localforage": "^1.10.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-router-dom": "^7.13.0",
     "simple-peer": "^9.11.1",
     "socket.io-client": "^4.8.3",
     "tweetnacl": "^1.0.3",
-    "tweetnacl-util": "^0.15.1"
+    "tweetnacl-util": "^0.15.1",
+    "vite-plugin-node-polyfills": "^0.25.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -67,6 +70,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "terser": "^5.46.0",
     "vite": "^7.2.4",
     "wait-on": "^7.2.0"
   }

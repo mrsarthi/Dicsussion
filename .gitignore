@@ -35,3 +35,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local Config & Secrets
+.env
+.env.*
+.npmrc
+
+# Local Build Scripts
+build-dist.js

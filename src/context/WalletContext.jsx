@@ -10,7 +10,7 @@ import {
     isWeb3Available,
 } from '../blockchain/web3Provider';
 import { getOrCreateKeys, clearKeys, getStoredKeys, storeKeysFromSignature } from '../crypto/keyManager';
-import { registerUser } from '../services/gunService';
+import { register as registerUser } from '../services/socketService';
 
 const WalletContext = createContext(null);
 
