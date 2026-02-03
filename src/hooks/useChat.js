@@ -93,22 +93,31 @@ export function useChat(myAddress) {
                 });
 
                 // Add sender to contacts if not exists, use username from message
+                // Also update lastMessageTime and unreadCount
                 if (msg.from && msg.from.toLowerCase() !== myAddress.toLowerCase()) {
                     setContacts(prev => {
                         const existingIndex = prev.findIndex(c => c.address.toLowerCase() === msg.from.toLowerCase());
+                        const isCurrentChat = activeChatRef.current?.address?.toLowerCase() === msg.from.toLowerCase();
+
                         if (existingIndex === -1) {
-                            // New contact - add with username from message
+                            // New contact - add with username, timestamp, and unread count
                             return [...prev, {
                                 address: msg.from,
-                                username: msg.senderUsername
+                                username: msg.senderUsername,
+                                lastMessageTime: msg.timestamp,
+                                unreadCount: isCurrentChat ? 0 : 1
                             }];
-                        } else if (msg.senderUsername && !prev[existingIndex].username) {
-                            // Update existing contact with username if we didn't have it
+                        } else {
+                            // Update existing contact
                             const updated = [...prev];
-                            updated[existingIndex] = { ...updated[existingIndex], username: msg.senderUsername };
+                            updated[existingIndex] = {
+                                ...updated[existingIndex],
+                                username: msg.senderUsername || updated[existingIndex].username,
+                                lastMessageTime: msg.timestamp,
+                                unreadCount: isCurrentChat ? 0 : (updated[existingIndex].unreadCount || 0) + 1
+                            };
                             return updated;
                         }
-                        return prev;
                     });
                 }
             }, keys);
@@ -163,6 +172,13 @@ export function useChat(myAddress) {
             address: recipientAddress,
             info: initialInfo
         });
+
+        // Clear unread count for this contact
+        setContacts(prev => prev.map(c =>
+            c.address.toLowerCase() === recipientAddress.toLowerCase()
+                ? { ...c, unreadCount: 0 }
+                : c
+        ));
 
         try {
             // Try to establish P2P connection

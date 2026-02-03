@@ -101,27 +101,32 @@ export function ChatInterface({ walletAddress }) {
                             </p>
                         </div>
                     ) : (
-                        contacts.map((contact) => (
-                            <div
-                                key={contact.address}
-                                className={`contact-item ${activeChat?.address === contact.address ? 'active' : ''}`}
-                                onClick={() => openChat(contact.address)}
-                            >
-                                <div className="avatar">
-                                    {contact.address.slice(2, 4).toUpperCase()}
-                                </div>
-                                <div className="contact-info">
-                                    <span className="contact-name">
-                                        {contact.username ? `@${contact.username}` : formatAddress(contact.address)}
-                                    </span>
-                                    {contact.username && (
-                                        <span className="text-xs text-muted">
-                                            {formatAddress(contact.address)}
+                        [...contacts]
+                            .sort((a, b) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0))
+                            .map((contact) => (
+                                <div
+                                    key={contact.address}
+                                    className={`contact-item ${activeChat?.address === contact.address ? 'active' : ''}`}
+                                    onClick={() => openChat(contact.address)}
+                                >
+                                    <div className="avatar">
+                                        {contact.address.slice(2, 4).toUpperCase()}
+                                    </div>
+                                    <div className="contact-info">
+                                        <span className="contact-name">
+                                            {contact.username ? `@${contact.username}` : formatAddress(contact.address)}
                                         </span>
+                                        {contact.username && (
+                                            <span className="text-xs text-muted">
+                                                {formatAddress(contact.address)}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {contact.unreadCount > 0 && (
+                                        <span className="unread-badge">{contact.unreadCount}</span>
                                     )}
                                 </div>
-                            </div>
-                        ))
+                            ))
                     )}
                 </div>
             </aside>

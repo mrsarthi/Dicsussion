@@ -89,6 +89,23 @@
     text-overflow: ellipsis;
 }
 
+/* Unread message badge */
+.unread-badge {
+    background: var(--accent-primary);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
 /* Main Chat Area */
 .chat-main {
     flex: 1;
