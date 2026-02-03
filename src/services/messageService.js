@@ -1,10 +1,33 @@
-// Message Service - High-level messaging API
+// Message Service - High-level messaging API with hybrid P2P/Relay transport
 import { encryptMessage, decryptMessage } from '../crypto/crypto';
 import { getStoredKeys } from '../crypto/keyManager';
-import * as gunService from './gunService';
+import * as socketService from './socketService';
+import * as webrtcService from './webrtcService';
+
+// Track sent message IDs for deduplication
+const sentMessageIds = new Set();
+
+/**
+ * Initialize messaging services
+ */
+export function initMessaging() {
+    // Initialize WebRTC service (sets up signal listener)
+    webrtcService.init();
+}
+
+/**
+ * Register user with the messaging network
+ * @param {string} address - Wallet address
+ * @param {string} publicKey - Encryption public key
+ */
+export async function registerUser(address, publicKey) {
+    socketService.initSocket();
+    await socketService.register(address, publicKey);
+}
 
 /**
  * Send an encrypted message to a recipient
+ * Uses P2P if connected, falls back to server relay
  * @param {string} senderAddress - Sender's wallet address
  * @param {string} recipientAddress - Recipient's wallet address
  * @param {string} plainText - The message content
@@ -17,77 +40,100 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         throw new Error('No encryption keys found. Please reconnect your wallet.');
     }
 
-    // Get recipient's public key
-    const recipient = await gunService.getUser(recipientAddress);
-    if (!recipient || !recipient.publicKey) {
-        throw new Error('Waiting for recipient to come online. Their public key is not yet synced. They need to connect to DecentraChat first.');
+    // Get recipient's public key from server
+    const recipientPubKey = await socketService.getPublicKey(recipientAddress);
+    if (!recipientPubKey) {
+        throw new Error('Recipient not found. They need to connect to DecentraChat first.');
     }
 
     // Encrypt the message
-    const encryptedData = encryptMessage(plainText, recipient.publicKey, myKeys.secretKey);
+    const encryptedData = encryptMessage(plainText, recipientPubKey, myKeys.secretKey);
 
-    // Send via GunDB with sender's public key attached
+    // Get sender's username from localStorage
+    const senderUsername = localStorage.getItem('decentrachat_username') || null;
+
+    // Build message payload
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const payload = {
-        ...encryptedData,
-        senderPublicKey: myKeys.publicKey // Attach identity proof
+        id: messageId,
+        encrypted: encryptedData.encrypted,
+        nonce: encryptedData.nonce,
+        senderPublicKey: myKeys.publicKey,
+        senderUsername: senderUsername, // Include username in message
+        timestamp: Date.now(),
     };
 
-    const messageId = gunService.sendMessage(senderAddress, recipientAddress, payload);
+    // Track for deduplication
+    sentMessageIds.add(messageId);
+
+    // Try P2P first
+    const p2pSent = webrtcService.sendToPeer(recipientAddress, {
+        ...payload,
+        from: senderAddress,
+        to: recipientAddress,
+    });
+
+    if (!p2pSent) {
+        // Fall back to server relay
+        console.log('📡 Using server relay for message delivery');
+        socketService.sendMessage(recipientAddress, payload);
+    }
 
     return {
         id: messageId,
         from: senderAddress,
         to: recipientAddress,
-        content: plainText, // Keep plaintext for sender's view
-        encrypted: encryptedData.encrypted, // Include for debug view
-        nonce: encryptedData.nonce, // Include for debug view
+        content: plainText,
+        encrypted: encryptedData.encrypted,
+        nonce: encryptedData.nonce,
         senderPublicKey: myKeys.publicKey,
+        senderUsername: senderUsername,
         timestamp: Date.now(),
         status: 'sent',
+        transport: p2pSent ? 'p2p' : 'relay',
     };
 }
 
 /**
  * Decrypt a received message
- * @param {Object} encryptedMessage - Message object from GunDB
+ * @param {Object} encryptedMessage - Message object
+ * @param {Object} cachedKeys - Optional cached keys
+ * @param {string} myAddress - Optional current user's address for sender detection
  * @returns {Promise<Object>} Decrypted message object
  */
-export async function decryptReceivedMessage(encryptedMessage) {
-    const myKeys = await getStoredKeys();
+export async function decryptReceivedMessage(encryptedMessage, cachedKeys = null, myAddress = null) {
+    if (!encryptedMessage) return null;
+
+    const myKeys = cachedKeys || await getStoredKeys();
     if (!myKeys) {
         throw new Error('No encryption keys found.');
     }
 
-    // Try to get public key from message itself first (new protocol)
-    let senderPublicKey = encryptedMessage.senderPublicKey;
-
-    if (!senderPublicKey) {
-        const sender = await gunService.getUser(encryptedMessage.from);
-        if (sender) senderPublicKey = sender.publicKey;
-    }
-
-    // SPECIAL CASE: If I am the sender, I need to use the RECIPIENT'S public key 
-    // to derive the shared secret.
-    if (encryptedMessage.from.toLowerCase() === myKeys.address.toLowerCase()) {
-        const recipient = await gunService.getUser(encryptedMessage.to);
-        if (recipient) {
-            senderPublicKey = recipient.publicKey;
-        }
-    }
-
-    // HANDLE PARTIAL UPDATES (Status changes)
-    // If message has no encrypted content (just status update), return as is
+    // Handle status-only updates
     if (!encryptedMessage.encrypted && encryptedMessage.status) {
         return {
             ...encryptedMessage,
-            decryptionFailed: false // It's just a status update
+            decryptionFailed: false
         };
     }
 
-    if (!senderPublicKey) {
+    // Determine if I'm the sender - use passed address or keys.address
+    const walletAddress = myAddress || myKeys.address;
+    const iAmSender = walletAddress &&
+        encryptedMessage.from?.toLowerCase() === walletAddress.toLowerCase();
+
+    // Get the appropriate public key for decryption
+    let otherPartyPublicKey = encryptedMessage.senderPublicKey;
+
+    // If I'm the sender, I need recipient's public key to decrypt
+    if (iAmSender) {
+        otherPartyPublicKey = await socketService.getPublicKey(encryptedMessage.to);
+    }
+
+    if (!otherPartyPublicKey) {
         return {
             ...encryptedMessage,
-            content: '[Unable to decrypt: sender unknown]',
+            content: '[Unable to decrypt: key not found]',
             decryptionFailed: true
         };
     }
@@ -96,7 +142,7 @@ export async function decryptReceivedMessage(encryptedMessage) {
         const decryptedContent = decryptMessage(
             encryptedMessage.encrypted,
             encryptedMessage.nonce,
-            senderPublicKey,
+            otherPartyPublicKey,
             myKeys.secretKey
         );
 
@@ -106,9 +152,6 @@ export async function decryptReceivedMessage(encryptedMessage) {
             decryptionFailed: false
         };
     } catch (err) {
-        // If decryption fails for self-message, it might be because we don't have the right key pair anymore
-        // or the message was strictly encrypted for the recipient only (if ephemeral keys used)
-        // But with standard Nacl Box, it should work.
         console.error('Decryption failed:', err);
         return {
             ...encryptedMessage,
@@ -119,93 +162,104 @@ export async function decryptReceivedMessage(encryptedMessage) {
 }
 
 /**
- * Start a conversation with a new user
- * @param {string} myAddress 
- * @param {string} theirAddress 
+ * Subscribe to incoming messages (P2P + Server relay)
  * @param {Function} onMessage - Callback for new messages
- * @returns {Object} Conversation controller
+ * @param {Object} myKeys - User's keys for decryption
  */
-export async function startConversation(myAddress, theirAddress, onMessage) {
-    // Try to get their info, but don't require it
-    // They might not be registered yet, but we can still start a chat
-    const theirInfo = await gunService.getUser(theirAddress);
+export function subscribeToMessages(onMessage, myKeys) {
+    const processedIds = new Set();
 
-    // If not found, we'll create a placeholder - messages will sync when they join
+    const handleMessage = async (msg) => {
+        // Skip if we sent this message
+        if (sentMessageIds.has(msg.id)) return;
 
-    // Load existing messages
-    const existingMessages = await gunService.getConversationMessages(myAddress, theirAddress);
-    const decryptedMessages = [];
+        // Skip duplicates
+        if (processedIds.has(msg.id)) return;
+        processedIds.add(msg.id);
 
-    for (const msg of existingMessages) {
-        const decrypted = await decryptReceivedMessage(msg);
-        decryptedMessages.push(decrypted);
-    }
-
-    // Track seen message IDs to distinguish NEW messages from duplicates
-    // But we MUST allow updates to seen messages (e.g. status changes)
-    const seenIds = new Set(decryptedMessages.map(m => m.id));
-
-    // Subscribe to new messages
-    const subscription = gunService.subscribeToConversation(myAddress, theirAddress, async (msg) => {
-        // If it's a NEW message
-        if (!seenIds.has(msg.id)) {
-            seenIds.add(msg.id);
-            const decrypted = await decryptReceivedMessage(msg);
-            onMessage(decrypted);
-        } else {
-            // It's an UPDATE (e.g. status change)
-            // Even if we've seen it, pass it through so UI can update status
-            // For updates, we might receive partial data, so decryptReceivedMessage needs to handle that (added above)
-            const decrypted = await decryptReceivedMessage(msg);
-            onMessage(decrypted);
-        }
-    });
-
-    return {
-        existingMessages: decryptedMessages,
-        theirInfo,
-        unsubscribe: () => subscription.off(),
+        const decrypted = await decryptReceivedMessage(msg, myKeys);
+        onMessage(decrypted);
     };
+
+    // Listen to server relay
+    socketService.onMessage(handleMessage);
+
+    // Listen to P2P
+    webrtcService.onData((msg) => {
+        handleMessage(msg);
+    });
+}
+
+/**
+ * Try to establish P2P connection with a user
+ * @param {string} theirAddress
+ */
+export async function connectToPeer(theirAddress) {
+    return await webrtcService.connectToPeer(theirAddress);
+}
+
+/**
+ * Get connection type with a peer
+ * @param {string} peerAddress
+ * @returns {'p2p' | 'relay' | 'offline'}
+ */
+export function getConnectionType(peerAddress) {
+    return webrtcService.getConnectionType(peerAddress);
 }
 
 /**
  * Search for a user by address or username
- * @param {string} query - Address or username
+ * @param {string} query - Address (0x...) or username (@username or username)
  * @returns {Promise<Object|null>}
  */
 export async function searchUser(query) {
-    // Check if it's an address
-    if (query.startsWith('0x') && query.length === 42) {
-        return await gunService.getUser(query);
+    const trimmed = query.trim();
+
+    // Search by address
+    if (trimmed.startsWith('0x') && trimmed.length === 42) {
+        return await socketService.getUser(trimmed);
     }
 
-    // Try as username
-    const address = await gunService.getAddressByUsername(query);
-    if (address) {
-        return await gunService.getUser(address);
+    // Search by username
+    if (trimmed.length >= 3) {
+        const username = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+        return await socketService.lookupByUsername(username);
     }
 
     return null;
 }
 
 /**
- * Mark a message as delivered
- * @param {string} senderAddress 
- * @param {string} recipientAddress 
- * @param {string} messageId 
+ * Get conversation history with a peer
+ * @param {string} peerAddress
+ * @returns {Promise<Array>}
  */
-export function markMessageAsDelivered(senderAddress, recipientAddress, messageId) {
-    const conversationId = gunService.getConversationId(senderAddress, recipientAddress);
-    gunService.updateMessageStatus(conversationId, messageId, 'delivered');
+export async function getHistory(peerAddress) {
+    return await socketService.getHistory(peerAddress);
 }
 
 /**
- * Mark a message as read
- * @param {string} senderAddress 
- * @param {string} recipientAddress 
- * @param {string} messageId 
+ * Send a delivery receipt
+ * @param {string} senderAddress - Original sender's address
+ * @param {string} messageId
  */
-export function markMessageAsRead(senderAddress, recipientAddress, messageId) {
-    const conversationId = gunService.getConversationId(senderAddress, recipientAddress);
-    gunService.updateMessageStatus(conversationId, messageId, 'read');
+export function sendDeliveryReceipt(senderAddress, messageId) {
+    socketService.sendReceipt(messageId, senderAddress, 'delivered');
+}
+
+/**
+ * Send a read receipt
+ * @param {string} senderAddress - Original sender's address
+ * @param {string} messageId
+ */
+export function sendReadReceipt(senderAddress, messageId) {
+    socketService.sendReceipt(messageId, senderAddress, 'read');
+}
+
+/**
+ * Subscribe to message receipts
+ * @param {Function} callback - Called with { messageId, type, from }
+ */
+export function onMessageReceipt(callback) {
+    socketService.onReceipt(callback);
 }

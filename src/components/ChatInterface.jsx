@@ -11,6 +11,7 @@ export function ChatInterface({ walletAddress }) {
         contacts,
         isLoading,
         error,
+        connectionType,
         openChat,
         closeChat,
         sendMessage,
@@ -21,7 +22,7 @@ export function ChatInterface({ walletAddress }) {
     const [newMessage, setNewMessage] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
-    const [showDebug, setShowDebug] = useState(false); // Toggle to show encrypted data
+    const [showDebug, setShowDebug] = useState(false);
     const messagesEndRef = useRef(null);
 
     // Auto-scroll to bottom when new messages arrive
@@ -52,7 +53,7 @@ export function ChatInterface({ walletAddress }) {
         setIsSearching(false);
 
         if (user) {
-            openChat(user.address);
+            openChat(user.address, user); // Pass user info with username
             setSearchQuery('');
         }
     };
@@ -103,8 +104,7 @@ export function ChatInterface({ walletAddress }) {
                         contacts.map((contact) => (
                             <div
                                 key={contact.address}
-                                className={`contact-item ${activeChat?.address === contact.address ? 'active' : ''
-                                    }`}
+                                className={`contact-item ${activeChat?.address === contact.address ? 'active' : ''}`}
                                 onClick={() => openChat(contact.address)}
                             >
                                 <div className="avatar">
@@ -112,11 +112,13 @@ export function ChatInterface({ walletAddress }) {
                                 </div>
                                 <div className="contact-info">
                                     <span className="contact-name">
-                                        {contact.username || formatAddress(contact.address)}
+                                        {contact.username ? `@${contact.username}` : formatAddress(contact.address)}
                                     </span>
-                                    <span className="text-xs text-muted">
-                                        {formatAddress(contact.address)}
-                                    </span>
+                                    {contact.username && (
+                                        <span className="text-xs text-muted">
+                                            {formatAddress(contact.address)}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         ))
@@ -167,13 +169,21 @@ export function ChatInterface({ walletAddress }) {
                                 </div>
                                 <div className="chat-header-details">
                                     <span className="chat-header-name">
-                                        {activeChat.info?.username || formatAddress(activeChat.address)}
+                                        {activeChat.info?.username ? `@${activeChat.info.username}` : formatAddress(activeChat.address)}
                                     </span>
+                                    {activeChat.info?.username && (
+                                        <span className="text-xs text-muted">
+                                            {formatAddress(activeChat.address)}
+                                        </span>
+                                    )}
                                     <span className="encrypted-badge">
                                         🔒 End-to-End Encrypted
                                     </span>
                                 </div>
                             </div>
+                            <span className={`connection-badge ${connectionType}`}>
+                                {connectionType === 'p2p' ? '⚡ Direct P2P' : connectionType === 'relay' ? '🌐 Via Relay' : '📴 Offline'}
+                            </span>
                             <button
                                 className={`btn btn-ghost debug-btn ${showDebug ? 'active' : ''}`}
                                 onClick={() => setShowDebug(!showDebug)}

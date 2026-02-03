@@ -179,7 +179,6 @@
 
 /* Debug Toggle Button */
 .debug-btn {
-    margin-left: auto;
     font-size: 0.8rem;
     padding: var(--space-xs) var(--space-sm);
 }
@@ -187,6 +186,34 @@
 .debug-btn.active {
     background: rgba(16, 185, 129, 0.2);
     color: var(--success);
+}
+
+/* Connection Badge */
+.connection-badge {
+    margin-left: auto;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+}
+
+.connection-badge.p2p {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.connection-badge.relay {
+    background: rgba(99, 102, 241, 0.2);
+    color: #818cf8;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.connection-badge.offline {
+    background: rgba(107, 114, 128, 0.2);
+    color: #9ca3af;
+    border: 1px solid rgba(107, 114, 128, 0.3);
 }
 
 /* Debug Panel in Messages */
@@ -285,6 +312,27 @@
     margin-top: var(--space-xs);
     font-size: 0.7rem;
     opacity: 0.7;
+}
+
+/* Message Status Ticks */
+.message-status {
+    font-size: 0.75rem;
+    letter-spacing: -2px;
+    margin-left: 2px;
+}
+
+.message-status.sent {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.message-status.delivered {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.message-status.read {
+    color: #ff3b3b;
+    font-weight: bold;
+    text-shadow: 0 0 4px rgba(255, 59, 59, 0.5);
 }
 
 .message-encrypted {

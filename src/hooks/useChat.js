@@ -1,140 +1,152 @@
-// useChat Hook - Manage chat conversations
+// useChat Hook - Manage chat conversations with hybrid P2P/Relay
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     sendEncryptedMessage,
-    startConversation,
+    decryptReceivedMessage,
+    subscribeToMessages,
     searchUser,
-    markMessageAsRead,
-    markMessageAsDelivered
+    registerUser,
+    initMessaging,
+    connectToPeer,
+    getConnectionType,
+    getHistory,
+    sendDeliveryReceipt,
+    sendReadReceipt,
+    onMessageReceipt,
 } from '../services/messageService';
-import { updatePresence, subscribeToUserChats } from '../services/gunService';
+import { getStoredKeys } from '../crypto/keyManager';
 
 export function useChat(myAddress) {
     const [activeChat, setActiveChat] = useState(null);
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [contacts, setContacts] = useState([]);
-    const subscriptionRef = useRef(null);
-
-    const backgroundSubs = useRef({});
-
-    // Request notification permission on mount
-    useEffect(() => {
-        if (Notification.permission === 'default') {
-            Notification.requestPermission();
+    // Load contacts from localStorage on init
+    const [contacts, setContacts] = useState(() => {
+        try {
+            const saved = localStorage.getItem('decentrachat_contacts');
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
         }
-        return () => {
-            // Cleanup background subs
-            Object.values(backgroundSubs.current).forEach(sub => sub.unsubscribe());
-        };
-    }, []);
+    });
+    const [connectionType, setConnectionType] = useState('offline');
+    const keysRef = useRef(null);
+    const initializedRef = useRef(false);
+    const activeChatRef = useRef(null);
 
-    // Manage background subscriptions for consistent delivery receipts/notifications
+    // Save contacts to localStorage whenever they change
     useEffect(() => {
-        if (!myAddress) return;
-
-        contacts.forEach(async (contact) => {
-            // Skip if this is the active chat (handled by openChat)
-            if (activeChat && activeChat.address.toLowerCase() === contact.address.toLowerCase()) {
-                if (backgroundSubs.current[contact.address]) {
-                    backgroundSubs.current[contact.address].unsubscribe();
-                    delete backgroundSubs.current[contact.address];
-                }
-                return;
-            }
-
-            // Skip if already subscribed in background
-            if (backgroundSubs.current[contact.address]) return;
-
-            // Subscribe
-            try {
-                const sub = await startConversation(myAddress, contact.address, (msg) => {
-                    // Handle background message
-                    if (msg.from.toLowerCase() !== myAddress.toLowerCase()) {
-                        // Mark as delivered automatically
-                        markMessageAsDelivered(msg.from, myAddress, msg.id);
-
-                        // Notify if window hidden OR if we are in another chat
-                        if (document.hidden || (activeChat && activeChat.address.toLowerCase() !== msg.from.toLowerCase())) {
-                            if (Notification.permission === 'granted') {
-                                new Notification(`Message from ${contact.username || 'User'}`, {
-                                    body: msg.content,
-                                    icon: '/icon.png'
-                                });
-                                // Flash taskbar if in Electron
-                                if (window.electronAPI?.flashFrame) {
-                                    window.electronAPI.flashFrame(true);
-                                }
-                            }
-                        }
-                    }
-                });
-                backgroundSubs.current[contact.address] = sub;
-            } catch (e) {
-                console.error('Failed to subscribe in background', e);
-            }
-        });
-    }, [contacts, activeChat, myAddress]);
-
-    // Stop flashing on focus
-    useEffect(() => {
-        const handleFocus = () => {
-            if (window.electronAPI?.flashFrame) {
-                window.electronAPI.flashFrame(false);
-            }
-        };
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
-    }, []);
-
-    // Update presence and subscribe to chats periodically
-    useEffect(() => {
-        if (myAddress) {
-            updatePresence(myAddress);
-
-            // Subscribe to my chat list
-            const chatsSub = subscribeToUserChats(myAddress, async (chatInfo) => {
-                const alreadyExists = contacts.some(c => c.address.toLowerCase() === chatInfo.with.toLowerCase());
-
-                if (!alreadyExists) {
-                    // Fetch user info for this chat
-                    const userInfo = await searchUser(chatInfo.with);
-                    setContacts(prev => {
-                        if (prev.some(c => c.address.toLowerCase() === chatInfo.with.toLowerCase())) return prev;
-                        return [...prev, { address: chatInfo.with, ...userInfo }];
-                    });
-
-                    // Notification for new conversation
-                    if (document.hidden && Notification.permission === 'granted') {
-                        new Notification('New Conversation', {
-                            body: `New chat with ${userInfo?.username || chatInfo.with}`,
-                        });
-                    }
-                }
-            });
-
-            const interval = setInterval(() => {
-                updatePresence(myAddress);
-            }, 30000);
-
-            return () => {
-                clearInterval(interval);
-                chatsSub.off();
-            };
+        if (contacts.length > 0) {
+            localStorage.setItem('decentrachat_contacts', JSON.stringify(contacts));
         }
-    }, [myAddress]);
+    }, [contacts]);
 
-    // Cleanup subscription on unmount or chat change
+    // Keep activeChatRef in sync with activeChat state
     useEffect(() => {
-        return () => {
-            if (subscriptionRef.current) {
-                subscriptionRef.current.unsubscribe();
-            }
-        };
+        activeChatRef.current = activeChat;
     }, [activeChat]);
 
-    const openChat = useCallback(async (recipientAddress) => {
+    // Initialize messaging and subscribe to incoming messages
+    useEffect(() => {
+        if (!myAddress || initializedRef.current) return;
+
+        let mounted = true;
+
+        (async () => {
+            // Initialize messaging (loads SimplePeer)
+            await initMessaging();
+
+            // Get stored keys
+            const keys = await getStoredKeys();
+            if (!keys || !mounted) return;
+
+            keysRef.current = keys;
+
+            // Register with server
+            await registerUser(myAddress, keys.publicKey);
+
+            if (!mounted) return;
+
+            // Subscribe to incoming messages AFTER keys are loaded
+            subscribeToMessages((msg) => {
+                console.log('📨 Received message in hook:', msg.id, msg.content?.slice(0, 20));
+
+                // Send delivery receipt back to sender
+                if (msg.from && msg.from.toLowerCase() !== myAddress.toLowerCase()) {
+                    sendDeliveryReceipt(msg.from, msg.id);
+
+                    // If this chat is currently open, also send read receipt immediately
+                    if (activeChatRef.current?.address?.toLowerCase() === msg.from.toLowerCase()) {
+                        sendReadReceipt(msg.from, msg.id);
+                    }
+                }
+
+                // Handle incoming message
+                setMessages(prev => {
+                    const exists = prev.some(m => m.id === msg.id);
+                    if (exists) {
+                        // Update existing message
+                        return prev.map(m => m.id === msg.id ? msg : m);
+                    }
+                    return [...prev, msg].sort((a, b) => a.timestamp - b.timestamp);
+                });
+
+                // Add sender to contacts if not exists, use username from message
+                if (msg.from && msg.from.toLowerCase() !== myAddress.toLowerCase()) {
+                    setContacts(prev => {
+                        const existingIndex = prev.findIndex(c => c.address.toLowerCase() === msg.from.toLowerCase());
+                        if (existingIndex === -1) {
+                            // New contact - add with username from message
+                            return [...prev, {
+                                address: msg.from,
+                                username: msg.senderUsername
+                            }];
+                        } else if (msg.senderUsername && !prev[existingIndex].username) {
+                            // Update existing contact with username if we didn't have it
+                            const updated = [...prev];
+                            updated[existingIndex] = { ...updated[existingIndex], username: msg.senderUsername };
+                            return updated;
+                        }
+                        return prev;
+                    });
+                }
+            }, keys);
+
+            // Subscribe to message receipts (delivered/read)
+            onMessageReceipt(({ messageId, type }) => {
+                console.log(`✓ Receipt received: ${type} for ${messageId}`);
+                setMessages(prev => prev.map(m =>
+                    m.id === messageId ? { ...m, status: type } : m
+                ));
+            });
+
+            initializedRef.current = true;
+            console.log('✓ Messaging initialized and subscribed');
+        })();
+
+        return () => {
+            mounted = false;
+        };
+    }, [myAddress]);
+
+    // Update connection type periodically
+    useEffect(() => {
+        if (!activeChat) {
+            setConnectionType('offline');
+            return;
+        }
+
+        const updateConnectionType = () => {
+            setConnectionType(getConnectionType(activeChat.address));
+        };
+
+        updateConnectionType();
+        const interval = setInterval(updateConnectionType, 2000);
+        return () => clearInterval(interval);
+    }, [activeChat]);
+
+    const openChat = useCallback(async (recipientAddress, preloadedUserInfo = null) => {
         if (!myAddress) {
             setError('Please connect your wallet first');
             return;
@@ -142,69 +154,77 @@ export function useChat(myAddress) {
 
         setIsLoading(true);
         setError(null);
+        setMessages([]);
 
-        // Cleanup previous subscription
-        if (subscriptionRef.current) {
-            subscriptionRef.current.unsubscribe();
-        }
+        // Set active chat immediately with preloaded info if available
+        const contactInfo = contacts.find(c => c.address.toLowerCase() === recipientAddress.toLowerCase());
+        const initialInfo = preloadedUserInfo || contactInfo || { address: recipientAddress };
+        setActiveChat({
+            address: recipientAddress,
+            info: initialInfo
+        });
 
         try {
-            const conversation = await startConversation(
-                myAddress,
-                recipientAddress,
-                (newMessage) => {
-                    setMessages(prev => {
-                        const exists = prev.some(m => m.id === newMessage.id);
-                        if (exists) {
-                            // Update existing message (e.g. status change)
-                            return prev.map(m => m.id === newMessage.id ? newMessage : m);
-                        }
+            // Try to establish P2P connection
+            await connectToPeer(recipientAddress);
 
-                        // Handle new incoming message
-                        if (newMessage.from.toLowerCase() !== myAddress.toLowerCase()) {
-                            // Mark as read immediately if chat is open
-                            markMessageAsRead(newMessage.from, myAddress, newMessage.id);
+            // Get user info if not preloaded
+            const userInfo = preloadedUserInfo || await searchUser(recipientAddress);
+            if (userInfo) {
+                setActiveChat(prev => ({
+                    ...prev,
+                    info: userInfo
+                }));
+            }
 
-                            // System Notification
-                            if (document.hidden && Notification.permission === 'granted') {
-                                new Notification('New Message', {
-                                    body: newMessage.content,
-                                    icon: '/icon.png' // Optional
-                                });
-                                // Flash taskbar if in Electron
-                                if (window.electronAPI?.flashFrame) {
-                                    window.electronAPI.flashFrame(true);
-                                }
+            // Fetch message history from server
+            const history = await getHistory(recipientAddress);
+            let peerUsername = userInfo?.username;
+
+            if (history.length > 0) {
+                console.log(`📜 Loading ${history.length} historical messages`);
+                const decryptedHistory = [];
+                for (const msg of history) {
+                    const decrypted = await decryptReceivedMessage(msg, keysRef.current, myAddress);
+                    if (decrypted) {
+                        decryptedHistory.push(decrypted);
+                        // Send read receipt for messages from the other party
+                        if (msg.from && msg.from.toLowerCase() !== myAddress.toLowerCase()) {
+                            sendReadReceipt(msg.from, msg.id);
+                            // Get username from message if not already known
+                            if (!peerUsername && msg.senderUsername) {
+                                peerUsername = msg.senderUsername;
                             }
                         }
-
-                        return [...prev, newMessage].sort((a, b) => a.timestamp - b.timestamp);
-                    });
+                    }
                 }
-            );
+                setMessages(decryptedHistory.sort((a, b) => a.timestamp - b.timestamp));
+            }
 
-            setActiveChat({
-                address: recipientAddress,
-                info: conversation.theirInfo,
-            });
-
-            // Initial load - mark all unread as read (optional, keeping simple for now)
-            setMessages(conversation.existingMessages);
-            subscriptionRef.current = conversation;
-
-            // Add to contacts if not already there
+            // Add to contacts if not exists, or update existing with userInfo/username
             setContacts(prev => {
-                if (!prev.some(c => c.address.toLowerCase() === recipientAddress.toLowerCase())) {
-                    return [...prev, { address: recipientAddress, ...conversation.theirInfo }];
+                const existingIndex = prev.findIndex(c => c.address.toLowerCase() === recipientAddress.toLowerCase());
+                const contactData = {
+                    address: recipientAddress,
+                    ...userInfo,
+                    username: peerUsername || userInfo?.username
+                };
+
+                if (existingIndex === -1) {
+                    return [...prev, contactData];
                 }
-                return prev;
+                // Update existing contact with latest userInfo
+                const updated = [...prev];
+                updated[existingIndex] = { ...updated[existingIndex], ...contactData };
+                return updated;
             });
         } catch (err) {
+            console.error('Error opening chat:', err);
             setError(err.message);
         } finally {
             setIsLoading(false);
         }
-    }, [myAddress]);
+    }, [myAddress, contacts]);
 
     const sendMessage = useCallback(async (content) => {
         if (!activeChat || !myAddress) {
@@ -234,6 +254,11 @@ export function useChat(myAddress) {
         setError(null);
 
         try {
+            // For addresses, we can start a chat without requiring them to be registered
+            if (query.startsWith('0x') && query.length === 42) {
+                return { address: query.toLowerCase() };
+            }
+
             const user = await searchUser(query);
             if (user) {
                 return user;
@@ -250,12 +275,9 @@ export function useChat(myAddress) {
     }, []);
 
     const closeChat = useCallback(() => {
-        if (subscriptionRef.current) {
-            subscriptionRef.current.unsubscribe();
-            subscriptionRef.current = null;
-        }
         setActiveChat(null);
         setMessages([]);
+        setConnectionType('offline');
     }, []);
 
     return {
@@ -264,6 +286,7 @@ export function useChat(myAddress) {
         contacts,
         isLoading,
         error,
+        connectionType, // 'p2p' | 'relay' | 'offline'
         openChat,
         closeChat,
         sendMessage,

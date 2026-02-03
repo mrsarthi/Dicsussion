@@ -1,8 +1,9 @@
 // WalletConnect Component - Premium wallet connection UI
+import { useState } from 'react';
 import { useWallet } from '../context/WalletContext';
 import './WalletConnect.css';
 
-export function WalletConnect() {
+export function WalletConnect({ username }) {
     const {
         address,
         formattedAddress,
@@ -14,6 +15,18 @@ export function WalletConnect() {
         connect,
         disconnect,
     } = useWallet();
+
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(address);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+        }
+    };
 
     if (!isWeb3Detected) {
         return (
@@ -100,7 +113,19 @@ export function WalletConnect() {
                     {address.slice(2, 4).toUpperCase()}
                 </div>
                 <div className="wallet-details">
-                    <span className="wallet-address">{formattedAddress}</span>
+                    <div className="wallet-address-row">
+                        <span className="wallet-address">{formattedAddress}</span>
+                        <button
+                            className="copy-btn"
+                            onClick={handleCopy}
+                            title="Copy full address"
+                        >
+                            {copied ? '✓' : '📋'}
+                        </button>
+                    </div>
+                    {username && (
+                        <span className="wallet-username">@{username}</span>
+                    )}
                     <span className="encrypted-badge">
                         🔒 E2E Encrypted
                     </span>

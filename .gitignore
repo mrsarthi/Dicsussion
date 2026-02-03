@@ -1,3 +1,8 @@
+# GunDB local storage (do not commit)
+radata/
+*.tmp
+radata-*.tmp
+
 # Test scripts
 check-relays.js
 relay-server.js

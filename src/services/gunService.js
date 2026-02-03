@@ -225,11 +225,14 @@ export function getConversationMessages(addr1, addr2) {
             }
         });
 
-        // Give Gun time to collect messages
+        // Give Gun a moment to collect messages, but much faster
+        // Or resolve immediately if map() calls are sync (Gun's usually async)
+        // A small delay is still good for initial batching, but 1s is too long.
+        // Let's try 100ms - enough to grab local messages
         setTimeout(() => {
             allMessages.sort((a, b) => a.timestamp - b.timestamp);
             resolve(allMessages);
-        }, 1000);
+        }, 100);
     });
 }
 

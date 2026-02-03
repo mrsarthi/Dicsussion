@@ -1,0 +1,101 @@
+/* Username Setup Component Styles */
+
+.username-setup-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-lg);
+    background: var(--bg-primary);
+}
+
+.username-card {
+    width: 100%;
+    max-width: 420px;
+    padding: var(--space-2xl);
+    text-align: center;
+}
+
+.username-header {
+    margin-bottom: var(--space-xl);
+}
+
+.username-icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: var(--space-md);
+}
+
+.username-header h2 {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-sm);
+}
+
+.username-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.input-wrapper {
+    display: flex;
+    align-items: center;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: all var(--transition-fast);
+}
+
+.input-wrapper:focus-within {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.input-prefix {
+    padding: var(--space-sm) var(--space-md);
+    font-size: 1.1rem;
+    color: var(--accent-primary);
+    font-weight: 600;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-subtle);
+}
+
+.username-input {
+    flex: 1;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 1.1rem;
+}
+
+.username-input:focus {
+    box-shadow: none !important;
+}
+
+.input-hint {
+    font-size: 0.8rem;
+    text-align: left;
+}
+
+.username-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.username-actions .btn {
+    width: 100%;
+}
+
+.error-message {
+    padding: var(--space-sm) var(--space-md);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--error);
+    border-radius: var(--radius-md);
+    color: var(--error);
+    font-size: 0.9rem;
+    text-align: left;
+}

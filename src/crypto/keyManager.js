@@ -24,6 +24,11 @@ export async function getOrCreateKeys(walletAddress, signMessageFn) {
     if (storedAddress === walletAddress) {
         const storedKeys = await keyStore.getItem(KEY_STORAGE_KEY);
         if (storedKeys) {
+            // Ensure address is included
+            if (!storedKeys.address) {
+                storedKeys.address = walletAddress;
+                await keyStore.setItem(KEY_STORAGE_KEY, storedKeys);
+            }
             return storedKeys;
         }
     }
@@ -35,11 +40,17 @@ export async function getOrCreateKeys(walletAddress, signMessageFn) {
     const signature = await signMessageFn(message);
     const keys = deriveKeysFromSignature(signature);
 
+    // Add address to keys object
+    const keysWithAddress = {
+        ...keys,
+        address: walletAddress,
+    };
+
     // Store keys locally
     await keyStore.setItem(WALLET_ADDRESS_KEY, walletAddress);
-    await keyStore.setItem(KEY_STORAGE_KEY, keys);
+    await keyStore.setItem(KEY_STORAGE_KEY, keysWithAddress);
 
-    return keys;
+    return keysWithAddress;
 }
 
 /**
