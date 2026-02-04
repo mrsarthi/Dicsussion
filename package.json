@@ -16,19 +16,25 @@
     "electron:pack": "electron-builder --dir",
     "dist": "node build-dist.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mrsarthi/Dicsussion.git"
+  },
   "build": {
     "appId": "com.decentrachat.app",
     "productName": "DecentraChat",
-    "asar": false,
+    "asar": true,
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "package.json",
+      "node_modules/**/*"
     ],
     "win": {
-      "target": "zip",
+      "target": "nsis",
       "icon": "public/icon.ico"
     },
     "mac": {
@@ -41,12 +47,21 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "mrsarthi",
+        "repo": "Dicsussion"
+      }
+    ]
   },
   "dependencies": {
+    "electron-updater": "^6.7.3",
     "ethers": "^6.16.0",
-    "gun": "^0.2020.1241",
     "localforage": "^1.10.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

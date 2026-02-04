@@ -6,6 +6,7 @@ radata-*.tmp
 # Test scripts
 check-relays.js
 relay-server.js
+test-connection.js
 
 # Electron build output
 release/

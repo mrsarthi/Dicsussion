@@ -3,7 +3,7 @@ import { encryptMessage, decryptMessage } from '../crypto/crypto';
 import { getStoredKeys } from '../crypto/keyManager';
 import * as socketService from './socketService';
 import * as webrtcService from './webrtcService';
-import * as gunService from './gunService';
+
 
 // Track sent message IDs for deduplication
 const sentMessageIds = new Set();
@@ -24,9 +24,7 @@ export function initMessaging() {
 export async function registerUser(address, publicKey) {
     socketService.initSocket();
     await socketService.register(address, publicKey);
-    // Also register on GunDB
-    gunService.registerUser(address, publicKey);
-    // Store address for GunDB signaling usage
+
     localStorage.setItem('decentrachat_address', address);
 }
 
@@ -45,15 +43,12 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         throw new Error('No encryption keys found. Please reconnect your wallet.');
     }
 
-    // Get recipient's public key from server
-    const recipientPubKey = await socketService.getPublicKey(recipientAddress);
-    if (!recipientPubKey) {
-        // Try GunDB lookup
-        const gunUser = await gunService.getUser(recipientAddress);
-        if (gunUser) {
-            recipientPubKey = gunUser.publicKey;
-        }
-    }
+    // Get recipient's public key from server (Primary)
+    let recipientPubKey = await socketService.getPublicKey(recipientAddress);
+
+
+
+
 
     if (!recipientPubKey) {
         throw new Error('Recipient not found. They need to connect to DecentraChat first.');
@@ -87,17 +82,14 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
     });
 
     if (!p2pSent) {
-        // Fall back to server relay
+        // Hybrid: Use Relay
+        // Prefer Server Relay if connected
         if (socketService.isConnected()) {
             console.log('📡 Using server relay for message delivery');
             socketService.sendMessage(recipientAddress, payload);
         } else {
-            console.log('📡 Using GunDB relay for message delivery (Server unavailable)');
-            gunService.sendMessage(senderAddress, recipientAddress, {
-                encrypted: payload.encrypted,
-                nonce: payload.nonce,
-                senderPublicKey: payload.senderPublicKey
-            });
+            console.warn('⚠️ Server unreachable and P2P failed. Message could not be sent.');
+            throw new Error('Server unreachable. Cannot send message via relay.');
         }
     }
 
@@ -206,21 +198,6 @@ export function subscribeToMessages(onMessage, myKeys) {
     // Listen to server relay
     socketService.onMessage(handleMessage);
 
-    // Listen to GunDB chats (fallback)
-    const myAddress = myKeys.address;
-    if (myAddress) {
-        // Subscribe to my chat list to find active conversations
-        gunService.subscribeToUserChats(myAddress, (chatData) => {
-            const peerAddress = chatData.with; // 'with' contains the other person's address
-            if (peerAddress) {
-                // Subscribe to this specific conversation
-                gunService.subscribeToConversation(myAddress, peerAddress, (msg) => {
-                    handleMessage(msg);
-                });
-            }
-        });
-    }
-
     // Listen to P2P
     webrtcService.onData((msg) => {
         handleMessage(msg);
@@ -260,16 +237,10 @@ export async function searchUser(query) {
     // Search by username
     if (trimmed.length >= 3) {
         const username = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
-        // Try socket first
+
+        // 1. Try Socket
         const socketUser = await socketService.lookupByUsername(username);
         if (socketUser) return socketUser;
-
-        // Fallback to GunDB
-        const gunAddress = await gunService.getAddressByUsername(username);
-        if (gunAddress) {
-            const gunUser = await gunService.getUser(gunAddress);
-            if (gunUser) return gunUser;
-        }
     }
 
     return null;

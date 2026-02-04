@@ -172,6 +172,10 @@ export function onReceipt(callback) {
  */
 export function onConnectionChange(callback) {
     connectionChangeCallback = callback;
+    // Callback immediately with current status
+    if (socket) {
+        callback(socket.connected);
+    }
 }
 
 /**

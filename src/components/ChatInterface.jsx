@@ -193,7 +193,7 @@ export function ChatInterface({ walletAddress }) {
                                 </div>
                             </div>
                             <span className={`connection-badge ${connectionType}`}>
-                                {connectionType === 'p2p' ? '⚡ Direct P2P' : connectionType === 'relay' ? '🌐 Via Relay' : '📴 Offline'}
+                                {connectionType === 'p2p' ? '⚡ Direct P2P' : connectionType === 'relay' ? '🌐 Server Relay' : '📴 Offline'}
                             </span>
                             <button
                                 className={`btn btn-ghost debug-btn ${showDebug ? 'active' : ''}`}

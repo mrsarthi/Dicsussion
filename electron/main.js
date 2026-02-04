@@ -1,4 +1,5 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -248,6 +249,11 @@ app.whenReady().then(() => {
             createWindow();
         }
     });
+
+    // Check for updates
+    if (!isDev) {
+        autoUpdater.checkForUpdatesAndNotify();
+    }
 });
 
 // Cleanup
