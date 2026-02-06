@@ -18,4 +18,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Flash taskbar
     flashFrame: (flag) => ipcRenderer.invoke('flash-frame', flag),
+
+    // Update Management
+    onUpdateAvailable: (callback) => {
+        const listener = (event, info) => callback(info);
+        ipcRenderer.on('update-available', listener);
+        return () => ipcRenderer.removeListener('update-available', listener);
+    },
+    onUpdateProgress: (callback) => {
+        const listener = (event, progress) => callback(progress);
+        ipcRenderer.on('update-progress', listener);
+        return () => ipcRenderer.removeListener('update-progress', listener);
+    },
+    onUpdateDownloaded: (callback) => {
+        const listener = (event, info) => callback(info);
+        ipcRenderer.on('update-downloaded', listener);
+        return () => ipcRenderer.removeListener('update-downloaded', listener);
+    },
+    downloadUpdate: () => ipcRenderer.invoke('download-update'),
+    installUpdate: () => ipcRenderer.invoke('install-update'),
 });

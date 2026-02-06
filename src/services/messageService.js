@@ -34,9 +34,10 @@ export async function registerUser(address, publicKey) {
  * @param {string} senderAddress - Sender's wallet address
  * @param {string} recipientAddress - Recipient's wallet address
  * @param {string} plainText - The message content
+ * @param {Object} replyTo - Optional reply context { id, content, senderUsername }
  * @returns {Promise<Object>} The sent message object
  */
-export async function sendEncryptedMessage(senderAddress, recipientAddress, plainText) {
+export async function sendEncryptedMessage(senderAddress, recipientAddress, plainText, replyTo = null, metadata = {}) {
     // Get our keys
     const myKeys = await getStoredKeys();
     if (!myKeys) {
@@ -46,12 +47,8 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
     // Get recipient's public key from server (Primary)
     let recipientPubKey = await socketService.getPublicKey(recipientAddress);
 
-
-
-
-
     if (!recipientPubKey) {
-        throw new Error('Recipient not found. They need to connect to DecentraChat first.');
+        throw new Error(`Recipient ${recipientAddress} not found. They need to connect to DecentraChat first.`);
     }
 
     // Encrypt the message
@@ -68,7 +65,12 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         nonce: encryptedData.nonce,
         senderPublicKey: myKeys.publicKey,
         senderUsername: senderUsername, // Include username in message
+        replyTo: replyTo, // Include reply context
         timestamp: Date.now(),
+        // Group metadata
+        groupId: metadata.groupId,
+        groupName: metadata.groupName,
+        from: senderAddress, // Ensure sender address is always present
     };
 
     // Track for deduplication
@@ -102,10 +104,45 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         nonce: encryptedData.nonce,
         senderPublicKey: myKeys.publicKey,
         senderUsername: senderUsername,
+        replyTo: replyTo,
         timestamp: Date.now(),
         status: 'sent',
         transport: p2pSent ? 'p2p' : 'relay',
+        groupId: metadata.groupId, // Return groupId in result
+        groupName: metadata.groupName,
     };
+}
+
+/**
+ * Send typing status to a user
+ * @param {string} toAddress - User to notify
+ * @param {boolean} isTyping - True/False
+ * @param {string} groupId - Optional Group ID
+ */
+export function sendTypingStatus(toAddress, isTyping, groupId = null) {
+    if (!socketService.isConnected()) return;
+
+    socketService.sendSignal(toAddress, {
+        type: 'typing',
+        isTyping,
+        groupId
+    });
+}
+
+/**
+ * Subscribe to typing status updates
+ * @param {Function} callback - ({ from, isTyping, groupId }) => void
+ */
+export function onTypingStatus(callback) {
+    socketService.onSignal((data) => {
+        if (data.signal?.type === 'typing') {
+            callback({
+                from: data.from,
+                isTyping: data.signal.isTyping,
+                groupId: data.signal.groupId
+            });
+        }
+    });
 }
 
 /**
@@ -287,4 +324,20 @@ export function onMessageReceipt(callback) {
  */
 export function onConnectionChange(callback) {
     socketService.onConnectionChange(callback);
+}
+
+/**
+ * Subscribe to user status updates
+ * @param {Function} callback 
+ */
+export function onUserStatus(callback) {
+    return socketService.onUserStatus(callback);
+}
+
+/**
+ * Get status for multiple users
+ * @param {string[]} addresses
+ */
+export async function getUsersStatus(addresses) {
+    return await socketService.getUsersStatus(addresses);
 }

@@ -9,6 +9,8 @@ let messageCallback = null;
 let signalCallback = null;
 let receiptCallback = null;
 let connectionChangeCallback = null;
+let currentUser = null;
+let userStatusListeners = [];
 
 /**
  * Initialize socket connection
@@ -25,6 +27,11 @@ export function initSocket() {
 
     socket.on('connect', () => {
         console.log('🔌 Connected to signaling server');
+        // Re-register if we were previously registered (handles reconnects)
+        if (currentUser) {
+            console.log('🔄 Re-registering session...');
+            socket.emit('register', currentUser);
+        }
         if (connectionChangeCallback) connectionChangeCallback(true);
     });
 
@@ -47,6 +54,13 @@ export function initSocket() {
 
     // Handle WebRTC signals
     socket.on('signal', (data) => {
+        // Allow hooking into generic signals (like typing indicators)
+        if (data.signal?.type === 'typing') {
+            console.log('⌨️ Typing signal:', data.from?.slice(0, 10), data.signal.isTyping);
+            if (signalCallback) signalCallback(data); // Pass it through
+            return;
+        }
+
         console.log('📡 Received WebRTC signal from:', data.from?.slice(0, 10));
         if (signalCallback) {
             signalCallback(data);
@@ -71,8 +85,18 @@ export function initSocket() {
         }
     });
 
+    // Handle user status updates (online/offline)
+    socket.on('userStatus', (data) => {
+        console.log(`👤 User status update: ${data.address?.slice(0, 10)} is ${data.online ? 'Online' : 'Offline'}`);
+        userStatusListeners.forEach(listener => listener(data));
+    });
+
     return socket;
 }
+
+// ... existing code ...
+
+
 
 /**
  * Register user with the server
@@ -82,6 +106,9 @@ export function initSocket() {
  */
 export function register(address, publicKey, username = null) {
     if (!socket) initSocket();
+
+    // specific current user
+    currentUser = { address, publicKey, username };
 
     return new Promise((resolve) => {
         socket.emit('register', { address, publicKey, username });
@@ -179,6 +206,18 @@ export function onConnectionChange(callback) {
 }
 
 /**
+ * Subscribe to user status updates
+ * @param {Function} callback
+ * @returns {Function} unsubscribe function
+ */
+export function onUserStatus(callback) {
+    userStatusListeners.push(callback);
+    return () => {
+        userStatusListeners = userStatusListeners.filter(l => l !== callback);
+    };
+}
+
+/**
  * Send a message receipt (delivered or read)
  * @param {string} messageId - The message ID
  * @param {string} to - Original sender's address
@@ -227,6 +266,22 @@ export function checkOnline(address) {
         }
         socket.emit('checkOnline', { address }, (online) => {
             resolve(online);
+        });
+    });
+}
+
+/**
+ * Get status for multiple users
+ * @param {string[]} addresses
+ */
+export function getUsersStatus(addresses) {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({});
+            return;
+        }
+        socket.emit('getUsersStatus', { addresses }, (statuses) => {
+            resolve(statuses);
         });
     });
 }

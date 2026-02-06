@@ -252,7 +252,35 @@ app.whenReady().then(() => {
 
     // Check for updates
     if (!isDev) {
-        autoUpdater.checkForUpdatesAndNotify();
+        autoUpdater.autoDownload = false;
+
+        autoUpdater.on('update-available', (info) => {
+            if (mainWindow) {
+                mainWindow.webContents.send('update-available', info);
+            }
+        });
+
+        autoUpdater.on('download-progress', (progressObj) => {
+            if (mainWindow) {
+                mainWindow.webContents.send('update-progress', progressObj);
+            }
+        });
+
+        autoUpdater.on('update-downloaded', (info) => {
+            if (mainWindow) {
+                mainWindow.webContents.send('update-downloaded', info);
+            }
+        });
+
+        ipcMain.handle('download-update', () => {
+            autoUpdater.downloadUpdate();
+        });
+
+        ipcMain.handle('install-update', () => {
+            autoUpdater.quitAndInstall();
+        });
+
+        autoUpdater.checkForUpdates();
     }
 });
 

@@ -101,6 +101,13 @@ io.on('connection', (socket) => {
             publicKey,
             username: existingUsername
         });
+
+        // Broadcast online status to everyone else
+        socket.broadcast.emit('userStatus', {
+            address: normalizedAddress,
+            online: true,
+            lastSeen: Date.now()
+        });
     });
 
     // Set username for a user
@@ -222,6 +229,29 @@ io.on('connection', (socket) => {
         callback(user ? user.online : false);
     });
 
+    // Get status for multiple users
+    socket.on('getUsersStatus', ({ addresses }, callback) => {
+        const statuses = {};
+        if (Array.isArray(addresses)) {
+            addresses.forEach(addr => {
+                const normalized = addr.toLowerCase();
+                const user = users.get(normalized);
+                if (user) {
+                    statuses[normalized] = {
+                        online: user.online,
+                        lastSeen: user.lastSeen
+                    };
+                } else {
+                    statuses[normalized] = {
+                        online: false,
+                        lastSeen: null
+                    };
+                }
+            });
+        }
+        callback(statuses);
+    });
+
     // Get user info
     socket.on('getUser', ({ address }, callback) => {
         const user = users.get(address.toLowerCase());
@@ -288,14 +318,28 @@ io.on('connection', (socket) => {
 
     // Disconnect handling
     socket.on('disconnect', () => {
-        if (socket.address) {
-            const user = users.get(socket.address);
-            if (user) {
+        const address = socket.address;
+
+        if (address) {
+            const user = users.get(address);
+            if (user && user.socketId === socket.id) {
+                // Only mark offline if this was the active socket
                 user.online = false;
                 user.lastSeen = Date.now();
-                users.set(socket.address, user);
+                users.set(address, user);
+
+                // Broadcast offline status
+                socket.broadcast.emit('userStatus', {
+                    address: address,
+                    online: false,
+                    lastSeen: user.lastSeen
+                });
+                console.log(`[-] Disconnected (User Offline): ${address.slice(0, 10)}...`);
+            } else {
+                console.log(`[-] Disconnected (Stale Socket or Replaced): ${address.slice(0, 10)}...`);
             }
-            console.log(`[-] Disconnected: ${socket.address?.slice(0, 10)}...`);
+        } else {
+            console.log(`[-] Disconnected (Unregistered Socket): ${socket.id}`);
         }
     });
 });

@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from '../hooks/useChat';
 import { formatAddress } from '../blockchain/web3Provider';
+import { CreateGroupModal } from './CreateGroupModal';
 import './ChatInterface.css';
 
 export function ChatInterface({ walletAddress }) {
@@ -13,18 +14,25 @@ export function ChatInterface({ walletAddress }) {
         error,
         connectionType,
         serverConnected,
+        typingStatus,
         openChat,
         closeChat,
         sendMessage,
+        sendTyping,
+        createGroup,
         searchAndAddContact,
         clearError,
     } = useChat(walletAddress);
 
     const [newMessage, setNewMessage] = useState('');
+    const [replyingTo, setReplyingTo] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [showDebug, setShowDebug] = useState(false);
+    const [showGroupModal, setShowGroupModal] = useState(false);
     const messagesEndRef = useRef(null);
+    const inputRef = useRef(null);
+    const typingTimeoutRef = useRef(null);
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
@@ -36,13 +44,42 @@ export function ChatInterface({ walletAddress }) {
         if (!newMessage.trim() || isLoading) return;
 
         const messageText = newMessage;
+        const replyContext = replyingTo ? {
+            id: replyingTo.id,
+            content: replyingTo.content,
+            senderUsername: replyingTo.senderUsername || replyingTo.from
+        } : null;
+
         setNewMessage('');
+        setReplyingTo(null);
+        sendTyping(false); // Stop typing indicator
 
         try {
-            await sendMessage(messageText);
+            await sendMessage(messageText, replyContext);
         } catch (err) {
             setNewMessage(messageText); // Restore message on error
+            if (replyContext) setReplyingTo(replyingTo); // Restore reply context
         }
+    };
+
+    const handleInput = (e) => {
+        setNewMessage(e.target.value);
+
+        // Typing indicator logic
+        sendTyping(true);
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+            sendTyping(false);
+        }, 2000);
+    };
+
+    const handleReply = (msg) => {
+        setReplyingTo(msg);
+        inputRef.current?.focus();
+    };
+
+    const cancelReply = () => {
+        setReplyingTo(null);
     };
 
     const handleSearch = async (e) => {
@@ -54,7 +91,7 @@ export function ChatInterface({ walletAddress }) {
         setIsSearching(false);
 
         if (user) {
-            openChat(user.address, user); // Pass user info with username
+            openChat(user.address, user);
             setSearchQuery('');
         }
     };
@@ -66,8 +103,44 @@ export function ChatInterface({ walletAddress }) {
         });
     };
 
+    // Get typing users for active chat
+    const getTypingText = () => {
+        if (!activeChat) return null;
+        const chatStatus = typingStatus[activeChat.address] || {};
+        const typingUsers = Object.keys(chatStatus);
+
+        if (typingUsers.length === 0) return null;
+
+        if (activeChat.isGroup) {
+            // Map addresses to names if possible
+            const names = typingUsers.slice(0, 3).map(addr => {
+                // Try to find in contacts to get name
+                // Note: contacts list might not have full details for everyone if they are just group members
+                // But for now we just fallback to address
+                const contact = contacts.find(c => c.address.toLowerCase() === addr.toLowerCase());
+                return contact?.username || formatAddress(addr);
+            });
+
+            if (names.length === 1) return `${names[0]} is typing...`;
+            if (names.length === 2) return `${names[0]} and ${names[1]} are typing...`;
+            return `${names.join(', ')}... are typing`;
+        } else {
+            return `Typing...`;
+        }
+    };
+
+    const typingText = getTypingText();
+
     return (
         <div className="chat-container">
+            {showGroupModal && (
+                <CreateGroupModal
+                    contacts={contacts}
+                    onClose={() => setShowGroupModal(false)}
+                    onCreate={createGroup}
+                />
+            )}
+
             {/* Sidebar */}
             <aside className="sidebar glass-card">
                 <div className="sidebar-header">
@@ -84,10 +157,18 @@ export function ChatInterface({ walletAddress }) {
                     <input
                         type="text"
                         className="input"
-                        placeholder="Enter address or username..."
+                        placeholder="Addr, @user..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
+                    <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setShowGroupModal(true)}
+                        title="Create Group"
+                    >
+                        👥
+                    </button>
                     <button
                         type="submit"
                         className="btn btn-primary"
@@ -103,7 +184,7 @@ export function ChatInterface({ walletAddress }) {
                         <div className="empty-contacts">
                             <p className="text-muted">No conversations yet</p>
                             <p className="text-xs text-muted">
-                                Enter an address above to start chatting
+                                Search above or create a group
                             </p>
                         </div>
                     ) : (
@@ -116,17 +197,25 @@ export function ChatInterface({ walletAddress }) {
                                     onClick={() => openChat(contact.address)}
                                 >
                                     <div className="avatar">
-                                        {contact.address.slice(2, 4).toUpperCase()}
+                                        {contact.isGroup ? '👥' : contact.address.slice(2, 4).toUpperCase()}
                                     </div>
                                     <div className="contact-info">
                                         <span className="contact-name">
-                                            {contact.username ? `@${contact.username}` : formatAddress(contact.address)}
+                                            {contact.username ? (contact.username.startsWith('@') || contact.isGroup ? contact.username : `@${contact.username}`) : formatAddress(contact.address)}
                                         </span>
-                                        {contact.username && (
-                                            <span className="text-xs text-muted">
-                                                {formatAddress(contact.address)}
-                                            </span>
-                                        )}
+                                        <div className="contact-status-row">
+                                            {contact.username && !contact.isGroup && (
+                                                <span className="text-xs text-muted">
+                                                    {formatAddress(contact.address)}
+                                                </span>
+                                            )}
+                                            {contact.isGroup && (
+                                                <span className="text-xs text-muted">
+                                                    {contact.members?.length || 0} members
+                                                </span>
+                                            )}
+                                            {contact.online && <span className="status-indicator online small" title="Online"></span>}
+                                        </div>
                                     </div>
                                     {contact.unreadCount > 0 && (
                                         <span className="unread-badge">{contact.unreadCount}</span>
@@ -145,20 +234,20 @@ export function ChatInterface({ walletAddress }) {
                             <div className="no-chat-icon">💬</div>
                             <h2>Welcome to DecentraChat</h2>
                             <p className="text-secondary">
-                                Select a conversation or start a new one by entering an Ethereum address
+                                Select a conversation or start a new one
                             </p>
                             <div className="features-grid">
+                                <div className="feature-card glass-card">
+                                    <span className="feature-emoji">👥</span>
+                                    <span>Group Chats</span>
+                                </div>
                                 <div className="feature-card glass-card">
                                     <span className="feature-emoji">🔒</span>
                                     <span>End-to-End Encrypted</span>
                                 </div>
                                 <div className="feature-card glass-card">
-                                    <span className="feature-emoji">⛓️</span>
-                                    <span>Blockchain Identity</span>
-                                </div>
-                                <div className="feature-card glass-card">
-                                    <span className="feature-emoji">🌐</span>
-                                    <span>Decentralized</span>
+                                    <span className="feature-emoji">⌨️</span>
+                                    <span>Typing Indicators</span>
                                 </div>
                                 <div className="feature-card glass-card">
                                     <span className="feature-emoji">🚫</span>
@@ -176,20 +265,31 @@ export function ChatInterface({ walletAddress }) {
                             </button>
                             <div className="chat-header-info">
                                 <div className="avatar">
-                                    {activeChat.address.slice(2, 4).toUpperCase()}
+                                    {activeChat.isGroup ? '👥' : activeChat.address.slice(2, 4).toUpperCase()}
                                 </div>
                                 <div className="chat-header-details">
                                     <span className="chat-header-name">
-                                        {activeChat.info?.username ? `@${activeChat.info.username}` : formatAddress(activeChat.address)}
+                                        {activeChat.info?.username || (activeChat.isGroup ? 'Unnamed Group' : formatAddress(activeChat.address))}
                                     </span>
-                                    {activeChat.info?.username && (
-                                        <span className="text-xs text-muted">
-                                            {formatAddress(activeChat.address)}
+
+                                    {typingText ? (
+                                        <span className="text-xs text-primary animate-pulse font-medium">
+                                            {typingText}
                                         </span>
+                                    ) : (
+                                        <div className="chat-status-line">
+                                            <span className={`status-indicator ${activeChat.info?.online ? 'online' : 'offline'}`}></span>
+                                            <span className="status-text">
+                                                {activeChat.isGroup
+                                                    ? `${activeChat.info?.members?.length || 0} members`
+                                                    : (activeChat.info?.online ? 'Online' : 'Away')
+                                                }
+                                            </span>
+                                            <span className="encrypted-badge">
+                                                🔒 Encrypted
+                                            </span>
+                                        </div>
                                     )}
-                                    <span className="encrypted-badge">
-                                        🔒 End-to-End Encrypted
-                                    </span>
                                 </div>
                             </div>
                             <span className={`connection-badge ${connectionType}`}>
@@ -198,7 +298,7 @@ export function ChatInterface({ walletAddress }) {
                             <button
                                 className={`btn btn-ghost debug-btn ${showDebug ? 'active' : ''}`}
                                 onClick={() => setShowDebug(!showDebug)}
-                                title="Toggle debug mode to see encrypted data"
+                                title="Toggle debug mode"
                             >
                                 {showDebug ? '🔓 Hide Raw' : '🔍 Show Raw'}
                             </button>
@@ -226,7 +326,32 @@ export function ChatInterface({ walletAddress }) {
                                             : 'received'
                                             } ${msg.decryptionFailed ? 'failed' : ''}`}
                                     >
-                                        <div className="message-bubble">
+                                        <div
+                                            className="message-bubble"
+                                            onDoubleClick={() => handleReply(msg)}
+                                        >
+                                            {/* Show sender name in group chats if received */}
+                                            {activeChat.isGroup && msg.from?.toLowerCase() !== walletAddress?.toLowerCase() && (
+                                                <div className="text-xs opacity-75 font-bold mb-1" style={{ color: 'var(--accent-secondary)' }}>
+                                                    {msg.senderUsername || formatAddress(msg.from)}
+                                                </div>
+                                            )}
+
+                                            {msg.replyTo && (
+                                                <div className="message-reply-context">
+                                                    <div className="reply-bar-line"></div>
+                                                    <div className="reply-content">
+                                                        <span className="reply-sender">
+                                                            {msg.replyTo.senderUsername || 'User'}
+                                                        </span>
+                                                        <span className="reply-text">
+                                                            {msg.replyTo.content?.length > 50
+                                                                ? msg.replyTo.content.substring(0, 50) + '...'
+                                                                : msg.replyTo.content}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
                                             <p className="message-content">{msg.content}</p>
                                             {showDebug && msg.encrypted && (
                                                 <div className="debug-panel">
@@ -260,12 +385,26 @@ export function ChatInterface({ walletAddress }) {
 
                         {/* Message Input */}
                         <form className="message-input-form" onSubmit={handleSend}>
+                            {replyingTo && (
+                                <div className="reply-preview-bar animate-fadeIn">
+                                    <div className="reply-preview-content">
+                                        <span className="reply-to-label">Replying to <span className="font-bold">{replyingTo.senderUsername || 'User'}</span></span>
+                                        <span className="reply-preview-text">
+                                            {replyingTo.content?.length > 60
+                                                ? replyingTo.content.substring(0, 60) + '...'
+                                                : replyingTo.content}
+                                        </span>
+                                    </div>
+                                    <button type="button" className="close-reply-btn" onClick={cancelReply}>×</button>
+                                </div>
+                            )}
                             <input
+                                ref={inputRef}
                                 type="text"
                                 className="input message-input"
-                                placeholder="Type a message..."
+                                placeholder={activeChat.isGroup ? `Message ${activeChat.info?.username || 'group'}...` : "Type a message..."}
                                 value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
+                                onChange={handleInput}
                                 autoFocus
                             />
                             <button
@@ -291,3 +430,4 @@ export function ChatInterface({ walletAddress }) {
         </div>
     );
 }
+

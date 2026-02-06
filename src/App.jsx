@@ -6,6 +6,7 @@ import { ChatInterface } from './components/ChatInterface';
 import { UsernameSetup } from './components/UsernameSetup';
 import { initSocket, register } from './services/socketService';
 import { getStoredKeys } from './crypto/keyManager';
+import { UpdateManager } from './components/UpdateManager';
 import './styles/index.css';
 
 function AppContent() {
@@ -97,6 +98,7 @@ function AppContent() {
 function App() {
   return (
     <WalletProvider>
+      <UpdateManager />
       <AppContent />
     </WalletProvider>
   );

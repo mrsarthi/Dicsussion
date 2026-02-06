@@ -430,3 +430,156 @@
         max-width: 85%;
     }
 }
+
+/* Status Indicators */
+.chat-status-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-indicator.online {
+    background-color: #10b981;
+    box-shadow: 0 0 4px #10b981;
+}
+
+.status-indicator.offline {
+    background-color: #9ca3af;
+}
+
+.status-icon.offline {
+    background-color: #9ca3af;
+}
+
+.status-text {
+    font-weight: 500;
+}
+
+.contact-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.status-indicator.small {
+    width: 6px;
+    height: 6px;
+    margin-left: 4px;
+}
+
+/* Reply Components */
+.reply-preview-bar {
+    display: flex;
+    align-items: center;
+    background: var(--bg-tertiary);
+    padding: var(--space-sm) var(--space-md);
+    border-top: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--accent-primary);
+    margin-bottom: -1px;
+    /* Fuse with input */
+    position: relative;
+}
+
+.reply-preview-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+}
+
+.reply-to-label {
+    font-size: 0.75rem;
+    color: var(--accent-primary);
+}
+
+.reply-preview-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.close-reply-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: var(--space-xs);
+    margin-left: var(--space-sm);
+}
+
+.close-reply-btn:hover {
+    color: var(--error);
+}
+
+/* Message Reply Bubble */
+.message-reply-context {
+    display: flex;
+    gap: var(--space-sm);
+    background: rgba(0, 0, 0, 0.1);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-sm);
+    cursor: pointer;
+    /* Indication it might be clickable in future */
+    position: relative;
+    overflow: hidden;
+}
+
+/* Ensure reply context text is readable on sent messages (dark bg) */
+.message.sent .message-reply-context {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.message.received .message-reply-context {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.reply-bar-line {
+    width: 3px;
+    background: var(--accent-primary);
+    border-radius: 2px;
+}
+
+.reply-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    font-size: 0.8rem;
+}
+
+.reply-sender {
+    font-weight: 600;
+    opacity: 0.9;
+    font-size: 0.75rem;
+}
+
+.message.sent .reply-sender {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.message.received .reply-sender {
+    color: var(--accent-primary);
+}
+
+.reply-text {
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
