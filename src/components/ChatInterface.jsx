@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useChat } from '../hooks/useChat';
 import { formatAddress } from '../blockchain/web3Provider';
 import { CreateGroupModal } from './CreateGroupModal';
+import { GroupDetailsModal } from './GroupDetailsModal';
 import './ChatInterface.css';
 
 export function ChatInterface({ walletAddress }) {
@@ -30,6 +31,7 @@ export function ChatInterface({ walletAddress }) {
     const [isSearching, setIsSearching] = useState(false);
     const [showDebug, setShowDebug] = useState(false);
     const [showGroupModal, setShowGroupModal] = useState(false);
+    const [showGroupDetails, setShowGroupDetails] = useState(false);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
     const typingTimeoutRef = useRef(null);
@@ -258,12 +260,24 @@ export function ChatInterface({ walletAddress }) {
                     </div>
                 ) : (
                     <>
+                        {showGroupDetails && (
+                            <GroupDetailsModal
+                                group={activeChat.isGroup ? activeChat.info : null}
+                                onClose={() => setShowGroupDetails(false)}
+                                myAddress={walletAddress}
+                            />
+                        )}
+
                         {/* Chat Header */}
                         <header className="chat-header">
                             <button className="btn btn-ghost back-btn" onClick={closeChat}>
                                 ←
                             </button>
-                            <div className="chat-header-info">
+                            <div
+                                className={`chat-header-info ${activeChat.isGroup ? 'clickable' : ''}`}
+                                onClick={() => activeChat.isGroup && setShowGroupDetails(true)}
+                                title={activeChat.isGroup ? "View Group Details" : ""}
+                            >
                                 <div className="avatar">
                                     {activeChat.isGroup ? '👥' : activeChat.address.slice(2, 4).toUpperCase()}
                                 </div>

@@ -254,9 +254,28 @@ app.whenReady().then(() => {
     if (!isDev) {
         autoUpdater.autoDownload = false;
 
+        autoUpdater.on('error', (err) => {
+            console.error('Update error:', err);
+            if (mainWindow) {
+                mainWindow.webContents.send('update-error', err.message);
+            }
+        });
+
+        autoUpdater.on('checking-for-update', () => {
+            console.log('Checking for updates...');
+        });
+
         autoUpdater.on('update-available', (info) => {
+            console.log('Update available:', info);
             if (mainWindow) {
                 mainWindow.webContents.send('update-available', info);
+            }
+        });
+
+        autoUpdater.on('update-not-available', (info) => {
+            console.log('Update not available:', info);
+            if (mainWindow) {
+                mainWindow.webContents.send('update-not-available', info);
             }
         });
 
@@ -272,6 +291,10 @@ app.whenReady().then(() => {
             }
         });
 
+        ipcMain.handle('check-for-updates', () => {
+            autoUpdater.checkForUpdates();
+        });
+
         ipcMain.handle('download-update', () => {
             autoUpdater.downloadUpdate();
         });
@@ -280,6 +303,7 @@ app.whenReady().then(() => {
             autoUpdater.quitAndInstall();
         });
 
+        // Initial check
         autoUpdater.checkForUpdates();
     }
 });

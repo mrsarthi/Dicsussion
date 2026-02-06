@@ -20,7 +20,9 @@ import {
 import {
     saveMessage,
     getLocalHistory,
-    saveMessagesBulk
+    saveMessagesBulk,
+    saveContacts,
+    getSavedContacts
 } from '../services/storageService';
 
 export function useChat(myAddress) {
@@ -51,6 +53,13 @@ export function useChat(myAddress) {
             Object.values(typingTimeoutRef.current).forEach(timeout => clearTimeout(timeout));
         };
     }, []);
+
+    // Persist contacts whenever they change
+    useEffect(() => {
+        if (contacts.length > 0) {
+            saveContacts(contacts);
+        }
+    }, [contacts]);
 
     const createGroup = useCallback(async (groupName, memberAddresses) => {
         const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -94,6 +103,13 @@ export function useChat(myAddress) {
         (async () => {
             // ... (Init logic remains same, but we hook into onTypingStatus too)
             await initMessaging();
+
+            // Load persist contacts immediately
+            const cachedContacts = await getSavedContacts();
+            if (mounted && cachedContacts.length > 0) {
+                setContacts(cachedContacts);
+            }
+
             const keys = await getStoredKeys();
             if (!keys || !mounted) return;
             keysRef.current = keys;

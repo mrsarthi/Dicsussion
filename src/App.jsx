@@ -18,6 +18,7 @@ function AppContent() {
   const [isSocketReady, setIsSocketReady] = useState(false);
 
   // Initialize socket and register when wallet connects
+
   useEffect(() => {
     if (!isConnected || !address) return;
 

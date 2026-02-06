@@ -112,6 +112,54 @@ export async function saveMessagesBulk(chatId, messages) {
     });
 }
 
+// ... existing imports and code ...
+
+/**
+ * Get all saved contacts/groups
+ */
+export async function getSavedContacts() {
+    try {
+        const contacts = (await messageStore.getItem('visible_contacts')) || [];
+        // Deduplicate just in case
+        const unique = [];
+        const seen = new Set();
+        for (const c of contacts) {
+            if (!seen.has(c.address.toLowerCase())) {
+                seen.add(c.address.toLowerCase());
+                unique.push(c);
+            }
+        }
+        console.debug(`👥 Loaded ${unique.length} contacts from storage`);
+        return unique;
+    } catch (err) {
+        console.error('Failed to load contacts:', err);
+        return [];
+    }
+}
+
+/**
+ * Save contacts list to storage
+ * @param {Array} contacts 
+ */
+export async function saveContacts(contacts) {
+    if (!contacts) return;
+    try {
+        // Only save what's necessary to rebuild the sidebar
+        const minimized = contacts.map(c => ({
+            address: c.address,
+            username: c.username,
+            isGroup: c.isGroup,
+            members: c.members, // Crucial for groups
+            lastMessageTime: c.lastMessageTime,
+            unreadCount: c.unreadCount,
+            // Don't save online status, meaningless on reload
+        }));
+        await messageStore.setItem('visible_contacts', minimized);
+    } catch (err) {
+        console.error('Failed to save contacts:', err);
+    }
+}
+
 export async function clearHistory(chatId) {
     if (!chatId) return;
     await messageStore.removeItem(`chat_${chatId.toLowerCase()}`);

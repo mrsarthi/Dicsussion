@@ -181,7 +181,20 @@
 .chat-header-info {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
+    gap: 12px;
+    flex: 1;
+}
+
+.chat-header-info.clickable {
+    cursor: pointer;
+    border-radius: 8px;
+    padding: 4px 8px;
+    margin-left: -8px;
+    transition: background-color 0.2s;
+}
+
+.chat-header-info.clickable:hover {
+    background-color: rgba(255, 255, 255, 0.05);
 }
 
 .chat-header-details {
