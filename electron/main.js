@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Menu } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
@@ -148,6 +148,67 @@ function createWindow() {
         },
     });
 
+    // Create professional menu template
+    const template = [
+        {
+            label: 'File',
+            submenu: [
+                { role: 'quit' }
+            ]
+        },
+        {
+            label: 'Edit',
+            submenu: [
+                { role: 'undo' },
+                { role: 'redo' },
+                { type: 'separator' },
+                { role: 'cut' },
+                { role: 'copy' },
+                { role: 'paste' },
+                { role: 'selectAll' }
+            ]
+        },
+        {
+            label: 'View',
+            submenu: [
+                { role: 'reload' },
+                { role: 'forceReload' },
+                { role: 'toggleDevTools' },
+                { type: 'separator' },
+                { role: 'resetZoom' },
+                { role: 'zoomIn' },
+                { role: 'zoomOut' },
+                { type: 'separator' },
+                { role: 'togglefullscreen' }
+            ]
+        },
+        {
+            label: 'Window',
+            submenu: [
+                { role: 'minimize' },
+                { role: 'close' }
+            ]
+        },
+        {
+            role: 'help',
+            submenu: [
+                {
+                    label: 'Check for Updates',
+                    click: () => {
+                        if (!isDev) {
+                            autoUpdater.checkForUpdates();
+                        } else {
+                            console.log('Update check skipped in dev mode');
+                        }
+                    }
+                }
+            ]
+        }
+    ];
+
+    const menu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(menu);
+
     // Load the app
     if (isDev) {
         mainWindow.loadURL('http://localhost:5173');
@@ -211,6 +272,10 @@ ipcMain.handle('flash-frame', (event, flag) => {
     if (mainWindow) {
         mainWindow.flashFrame(flag);
     }
+});
+
+ipcMain.handle('app-exit', () => {
+    app.quit();
 });
 
 // Performance optimizations

@@ -3,8 +3,13 @@ import react from '@vitejs/plugin-react'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { resolve } from 'path'
 
+import packageJson from './package.json'
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    '__APP_VERSION__': JSON.stringify(packageJson.version),
+  },
   plugins: [
     react(),
     nodePolyfills({

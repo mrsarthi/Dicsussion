@@ -11,26 +11,7 @@
     z-index: 1000;
 }
 
-.update-toggle-btn {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 8px 12px;
-    background: rgba(40, 40, 45, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 20px;
-    color: #fff;
-    cursor: pointer;
-    font-size: 12px;
-    z-index: 9999;
-    opacity: 0.7;
-    transition: opacity 0.2s;
-    backdrop-filter: blur(10px);
-}
-
-.update-toggle-btn:hover {
-    opacity: 1;
-}
+/* Floating button removed */
 
 /* Glass Card Styles since Tailwind isn't here */
 .glass-card {

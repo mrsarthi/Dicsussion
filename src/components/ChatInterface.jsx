@@ -257,6 +257,13 @@ export function ChatInterface({ walletAddress }) {
                                 </div>
                             </div>
                         </div>
+                        <button
+                            className="home-update-btn"
+                            onClick={() => window.electronAPI && window.electronAPI.checkForUpdates()}
+                            title="Check for Updates"
+                        >
+                            🔄 Check Updates v{__APP_VERSION__}
+                        </button>
                     </div>
                 ) : (
                     <>
@@ -359,9 +366,6 @@ export function ChatInterface({ walletAddress }) {
                                                             {msg.replyTo.senderUsername || 'User'}
                                                         </span>
                                                         <span className="reply-text">
-                                                            {msg.replyTo.content?.length > 50
-                                                                ? msg.replyTo.content.substring(0, 50) + '...'
-                                                                : msg.replyTo.content}
                                                         </span>
                                                     </div>
                                                 </div>

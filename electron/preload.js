@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Flash taskbar
     flashFrame: (flag) => ipcRenderer.invoke('flash-frame', flag),
 
+    // App Control
+    appExit: () => ipcRenderer.invoke('app-exit'),
+
     // Update Management
     onUpdateAvailable: (callback) => {
         const listener = (event, info) => callback(info);

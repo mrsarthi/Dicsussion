@@ -85,15 +85,6 @@ export function UpdateManager() {
 
     return (
         <>
-            {!isVisible && (
-                <button
-                    onClick={handleCheck}
-                    className="update-toggle-btn"
-                    title="Check for Updates"
-                >
-                    build: v{localStorage.getItem('appVersion') || '1.2.0'} 🔄
-                </button>
-            )}
 
             {isVisible && (
                 <div className="update-manager-overlay">

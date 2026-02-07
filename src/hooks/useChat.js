@@ -355,7 +355,8 @@ export function useChat(myAddress) {
                     timestamp: start,
                     status: 'sent',
                     groupId: activeChat.address,
-                    isGroup: true
+                    isGroup: true,
+                    type: type
                 };
 
                 await saveMessage(activeChat.address, sentMessage); // Persist
@@ -368,7 +369,8 @@ export function useChat(myAddress) {
                     myAddress,
                     activeChat.address,
                     content,
-                    replyTo
+                    replyTo,
+                    { type: type }
                 );
                 await saveMessage(activeChat.address, sentMessage); // Persist
                 setMessages(prev => [...prev, sentMessage]);

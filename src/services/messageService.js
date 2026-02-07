@@ -64,13 +64,14 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         encrypted: encryptedData.encrypted,
         nonce: encryptedData.nonce,
         senderPublicKey: myKeys.publicKey,
-        senderUsername: senderUsername, // Include username in message
-        replyTo: replyTo, // Include reply context
+        senderUsername: senderUsername,
+        replyTo: replyTo,
         timestamp: Date.now(),
         // Group metadata
         groupId: metadata.groupId,
         groupName: metadata.groupName,
-        from: senderAddress, // Ensure sender address is always present
+        from: senderAddress,
+        type: metadata.type || 'text', // Default to text
     };
 
     // Track for deduplication
@@ -108,8 +109,9 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         timestamp: Date.now(),
         status: 'sent',
         transport: p2pSent ? 'p2p' : 'relay',
-        groupId: metadata.groupId, // Return groupId in result
+        groupId: metadata.groupId,
         groupName: metadata.groupName,
+        type: metadata.type || 'text',
     };
 }
 
@@ -200,7 +202,8 @@ export async function decryptReceivedMessage(encryptedMessage, cachedKeys = null
         return {
             ...encryptedMessage,
             content: decryptedContent,
-            decryptionFailed: false
+            decryptionFailed: false,
+            type: encryptedMessage.type || 'text'
         };
     } catch (err) {
         console.error('Decryption failed:', err);
