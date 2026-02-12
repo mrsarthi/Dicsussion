@@ -222,7 +222,8 @@ function createWindow() {
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
         // Open DevTools to debug black screen issues
-        mainWindow.webContents.openDevTools();
+        // Open DevTools to debug black screen issues
+        // mainWindow.webContents.openDevTools();
     });
 
     // Handle external links

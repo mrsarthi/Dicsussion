@@ -321,7 +321,7 @@ export function useChat(myAddress) {
 
     // ... (UseEffect for updates remains similar) ...
 
-    const sendMessage = useCallback(async (content, replyTo = null) => {
+    const sendMessage = useCallback(async (content, replyTo = null, type = 'text') => {
         if (!activeChat || !myAddress) {
             setError('No active chat');
             return;
@@ -341,7 +341,8 @@ export function useChat(myAddress) {
                         {
                             groupId: activeChat.address,
                             groupName: activeChat.info?.username || 'Group',
-                            members: activeChat.members // Propagate members list
+                            members: activeChat.members, // Propagate members list
+                            type: type
                         }
                     ));
 
