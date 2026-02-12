@@ -43,8 +43,4 @@ jobs:
           # If the commit is tagged with a version (e.g. "v1.0.0"),
           # release the app after building
           release: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        env:
-          # macOS signing requires these secrets if signing is enabled.
-          # For unsigned builds (users will have to bypass Gatekeeper), these are optional.
-          # MAC_CERTS: ${{ secrets.MAC_CERTS }}
-          # MAC_CERTS_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+
