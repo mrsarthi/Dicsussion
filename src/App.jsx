@@ -4,8 +4,9 @@ import { WalletProvider, useWallet } from './context/WalletContext';
 import { WalletConnect } from './components/WalletConnect';
 import { ChatInterface } from './components/ChatInterface';
 import { UsernameSetup } from './components/UsernameSetup';
-import { initSocket, register } from './services/socketService';
-import { getStoredKeys } from './crypto/keyManager';
+import { initSocket, register, disconnect } from './services/socketService';
+import { getStoredKeys, clearKeys } from './crypto/keyManager';
+import { clearAllData } from './services/storageService';
 import { UpdateManager } from './components/UpdateManager';
 import './styles/index.css';
 
@@ -68,6 +69,36 @@ function AppContent() {
     setShowUsernameSetup(false);
   };
 
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete your account?\n\n' +
+      'This will permanently erase:\n' +
+      '• All your messages\n' +
+      '• Your contacts\n' +
+      '• Your encryption keys\n\n' +
+      'This action cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    try {
+      // 1. Clear encryption keys
+      await clearKeys();
+      // 2. Clear all local chat data (messages, contacts)
+      await clearAllData();
+      // 3. Clear localStorage items
+      localStorage.removeItem('decentrachat_address');
+      localStorage.removeItem('decentrachat_username');
+      localStorage.removeItem('decentrachat_username_skipped');
+      // 4. Disconnect from server
+      disconnect();
+      // 5. Reload app to reset to login
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to delete account:', err);
+      alert('Failed to delete account. Please try again.');
+    }
+  };
+
   if (!isConnected) {
     return <WalletConnect />;
   }
@@ -91,7 +122,7 @@ function AppContent() {
   return (
     <div className="app">
       <WalletConnect username={username} />
-      <ChatInterface walletAddress={address} username={username} />
+      <ChatInterface walletAddress={address} username={username} onDeleteAccount={handleDeleteAccount} />
     </div>
   );
 }

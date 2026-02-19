@@ -6,7 +6,7 @@ import { CreateGroupModal } from './CreateGroupModal';
 import { GroupDetailsModal } from './GroupDetailsModal';
 import './ChatInterface.css';
 
-export function ChatInterface({ walletAddress }) {
+export function ChatInterface({ walletAddress, onDeleteAccount }) {
     const {
         activeChat,
         messages,
@@ -32,8 +32,11 @@ export function ChatInterface({ walletAddress }) {
     const [showDebug, setShowDebug] = useState(false);
     const [showGroupModal, setShowGroupModal] = useState(false);
     const [showGroupDetails, setShowGroupDetails] = useState(false);
+    const [imagePreview, setImagePreview] = useState(null); // base64 data URL
+    const [lightboxImage, setLightboxImage] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+    const fileInputRef = useRef(null);
     const typingTimeoutRef = useRef(null);
 
     // Auto-scroll to bottom when new messages arrive
@@ -82,6 +85,59 @@ export function ChatInterface({ walletAddress }) {
 
     const cancelReply = () => {
         setReplyingTo(null);
+    };
+
+    // Image handling
+    const resizeImage = (file, maxWidth = 1280) => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let { width, height } = img;
+
+                    if (width > maxWidth) {
+                        height = (height * maxWidth) / width;
+                        width = maxWidth;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.8));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleImageSelect = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) return;
+
+        const dataUrl = await resizeImage(file);
+        setImagePreview(dataUrl);
+        // Reset file input so same file can be re-selected
+        e.target.value = '';
+    };
+
+    const handleSendImage = async () => {
+        if (!imagePreview || isLoading) return;
+        const imgData = imagePreview;
+        setImagePreview(null);
+        try {
+            await sendMessage(imgData, null, 'image');
+        } catch (err) {
+            setImagePreview(imgData); // Restore on error
+        }
+    };
+
+    const cancelImagePreview = () => {
+        setImagePreview(null);
     };
 
     const handleSearch = async (e) => {
@@ -264,6 +320,15 @@ export function ChatInterface({ walletAddress }) {
                         >
                             🔄 Check Updates v{__APP_VERSION__}
                         </button>
+                        {onDeleteAccount && (
+                            <button
+                                className="home-delete-btn"
+                                onClick={onDeleteAccount}
+                                title="Delete your account and all data"
+                            >
+                                🗑️ Delete Account
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <>
@@ -370,7 +435,13 @@ export function ChatInterface({ walletAddress }) {
                                                     </div>
                                                 </div>
                                             )}
-                                            <p className="message-content">{msg.content}</p>
+                                            {msg.type === 'image' ? (
+                                                <div className="message-image-wrapper" onClick={() => setLightboxImage(msg.content)}>
+                                                    <img src={msg.content} alt="Sent image" className="message-image" loading="lazy" />
+                                                </div>
+                                            ) : (
+                                                <p className="message-content">{msg.content}</p>
+                                            )}
                                             {showDebug && msg.encrypted && (
                                                 <div className="debug-panel">
                                                     <div className="debug-label">🔐 Raw Encrypted Data:</div>
@@ -416,22 +487,57 @@ export function ChatInterface({ walletAddress }) {
                                     <button type="button" className="close-reply-btn" onClick={cancelReply}>×</button>
                                 </div>
                             )}
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                className="input message-input"
-                                placeholder={activeChat.isGroup ? `Message ${activeChat.info?.username || 'group'}...` : "Type a message..."}
-                                value={newMessage}
-                                onChange={handleInput}
-                                autoFocus
-                            />
-                            <button
-                                type="submit"
-                                className="btn btn-primary send-btn"
-                                disabled={!newMessage.trim() || isLoading}
-                            >
-                                <span className="send-icon">➤</span>
-                            </button>
+                            {imagePreview && (
+                                <div className="image-preview-bar animate-fadeIn">
+                                    <img src={imagePreview} alt="Preview" className="image-preview-thumb" />
+                                    <span className="image-preview-label">Image ready to send</span>
+                                    <button type="button" className="close-reply-btn" onClick={cancelImagePreview}>×</button>
+                                </div>
+                            )}
+                            <div className="message-input-row">
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={handleImageSelect}
+                                />
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost attach-btn"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    title="Send image"
+                                >
+                                    📎
+                                </button>
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    className="input message-input"
+                                    placeholder={activeChat.isGroup ? `Message ${activeChat.info?.username || 'group'}...` : "Type a message..."}
+                                    value={newMessage}
+                                    onChange={handleInput}
+                                    autoFocus
+                                />
+                                {imagePreview ? (
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary send-btn"
+                                        onClick={handleSendImage}
+                                        disabled={isLoading}
+                                    >
+                                        <span className="send-icon">➤</span>
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="submit"
+                                        className="btn btn-primary send-btn"
+                                        disabled={!newMessage.trim() || isLoading}
+                                    >
+                                        <span className="send-icon">➤</span>
+                                    </button>
+                                )}
+                            </div>
                         </form>
                     </>
                 )}
@@ -445,6 +551,14 @@ export function ChatInterface({ walletAddress }) {
                     </div>
                 )}
             </main>
+
+            {/* Lightbox */}
+            {lightboxImage && (
+                <div className="lightbox-overlay" onClick={() => setLightboxImage(null)}>
+                    <button className="lightbox-close" onClick={() => setLightboxImage(null)}>×</button>
+                    <img src={lightboxImage} alt="Full size" className="lightbox-image" onClick={(e) => e.stopPropagation()} />
+                </div>
+            )}
         </div>
     );
 }

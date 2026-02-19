@@ -164,3 +164,12 @@ export async function clearHistory(chatId) {
     if (!chatId) return;
     await messageStore.removeItem(`chat_${chatId.toLowerCase()}`);
 }
+
+/**
+ * Clear ALL local data (messages, contacts, everything)
+ * Used for account deletion
+ */
+export async function clearAllData() {
+    await messageStore.clear();
+    console.log('🗑️ All local chat data cleared');
+}

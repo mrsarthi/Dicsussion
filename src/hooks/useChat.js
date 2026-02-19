@@ -9,7 +9,8 @@ import {
     onMessageReceipt,
     getHistory,
     sendTypingStatus,
-    onTypingStatus
+    onTypingStatus,
+    searchUser
 } from '../services/messageService';
 import { getStoredKeys } from '../crypto/keyManager';
 import {
@@ -213,7 +214,7 @@ export function useChat(myAddress) {
                     // `messages` state IS only for the active chat.
 
                     if (isRelevant) {
-                        return [...prev, msg].sort((a, b) => a.timestamp - b.timestamp);
+                        return [...prev, msg];
                     }
                     return prev;
                 });
@@ -466,26 +467,21 @@ export function useChat(myAddress) {
 
     const searchAndAddContact = useCallback(async (query) => {
         try {
-            // Check if it's an address
-            if (query.startsWith('0x') && query.length === 42) {
-                // It's an address
-                const keys = await getUser(query);
-                if (keys) {
-                    // Check if already exists
-                    const exists = contacts.find(c => c.address.toLowerCase() === query.toLowerCase());
-                    if (!exists) {
-                        const newContact = {
-                            address: query,
-                            username: null, // We might not know it yet
-                            lastMessageTime: Date.now(),
-                            unreadCount: 0,
-                            online: false
-                        };
-                        setContacts(prev => [newContact, ...prev]);
-                        return newContact;
-                    }
-                    return exists;
+            const user = await searchUser(query);
+            if (user) {
+                const exists = contacts.find(c => c.address.toLowerCase() === user.address.toLowerCase());
+                if (!exists) {
+                    const newContact = {
+                        address: user.address,
+                        username: user.username || null,
+                        lastMessageTime: Date.now(),
+                        unreadCount: 0,
+                        online: user.online || false
+                    };
+                    setContacts(prev => [newContact, ...prev]);
+                    return newContact;
                 }
+                return exists;
             }
             return null;
         } catch (err) {
