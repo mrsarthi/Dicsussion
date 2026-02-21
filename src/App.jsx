@@ -10,6 +10,12 @@ import { clearAllData } from './services/storageService';
 import { UpdateManager } from './components/UpdateManager';
 import './styles/index.css';
 
+// Apply persisted font size on load
+const savedFontSize = localStorage.getItem('decentrachat_font_size');
+if (savedFontSize) {
+  document.documentElement.style.fontSize = `${savedFontSize}px`;
+}
+
 function AppContent() {
   const { address, isConnected } = useWallet();
   const [username, setUsername] = useState(() => {

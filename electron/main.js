@@ -150,73 +150,15 @@ function createWindow() {
         },
     });
 
-    // Create professional menu template
-    const template = [
-        {
-            label: 'File',
-            submenu: [
-                {
-                    label: 'Quit',
-                    accelerator: 'CmdOrCtrl+Q',
-                    click: () => {
-                        isQuitting = true;
-                        app.quit();
-                    }
-                }
-            ]
-        },
-        {
-            label: 'Edit',
-            submenu: [
-                { role: 'undo' },
-                { role: 'redo' },
-                { type: 'separator' },
-                { role: 'cut' },
-                { role: 'copy' },
-                { role: 'paste' },
-                { role: 'selectAll' }
-            ]
-        },
-        {
-            label: 'View',
-            submenu: [
-                { role: 'reload' },
-                { role: 'forceReload' },
-                { role: 'toggleDevTools' },
-                { type: 'separator' },
-                { role: 'resetZoom' },
-                { role: 'zoomIn' },
-                { role: 'zoomOut' },
-                { type: 'separator' },
-                { role: 'togglefullscreen' }
-            ]
-        },
-        {
-            label: 'Window',
-            submenu: [
-                { role: 'minimize' },
-                { role: 'close' }
-            ]
-        },
-        {
-            role: 'help',
-            submenu: [
-                {
-                    label: 'Check for Updates',
-                    click: () => {
-                        if (!isDev) {
-                            autoUpdater.checkForUpdates();
-                        } else {
-                            console.log('Update check skipped in dev mode');
-                        }
-                    }
-                }
-            ]
-        }
-    ];
+    // Remove native menu bar — settings are now in-app
+    Menu.setApplicationMenu(null);
 
-    const menu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(menu);
+    // Keep DevTools accessible via keyboard shortcut
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.control && input.shift && input.key === 'I') {
+            mainWindow.webContents.toggleDevTools();
+        }
+    });
 
     // Load the app
     if (isDev) {
@@ -305,6 +247,10 @@ ipcMain.handle('app-exit', () => {
     isQuitting = true;
     app.quit();
 });
+
+// DPI / display-scaling fix — render at 1× regardless of OS scale factor
+app.commandLine.appendSwitch('high-dpi-support', '1');
+app.commandLine.appendSwitch('force-device-scale-factor', '1');
 
 // Performance optimizations
 app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer');

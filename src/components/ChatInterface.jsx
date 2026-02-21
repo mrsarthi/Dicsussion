@@ -4,6 +4,7 @@ import { useChat } from '../hooks/useChat';
 import { formatAddress } from '../blockchain/web3Provider';
 import { CreateGroupModal } from './CreateGroupModal';
 import { GroupDetailsModal } from './GroupDetailsModal';
+import { SettingsModal } from './SettingsModal';
 import './ChatInterface.css';
 
 export function ChatInterface({ walletAddress, onDeleteAccount }) {
@@ -35,6 +36,7 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
     const [showGroupDetails, setShowGroupDetails] = useState(false);
     const [imagePreview, setImagePreview] = useState(null); // base64 data URL
     const [lightboxImage, setLightboxImage] = useState(null);
+    const [showSettings, setShowSettings] = useState(false);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -283,6 +285,10 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
                             ))
                     )}
                 </div>
+                <button className="sidebar-settings-btn" onClick={() => setShowSettings(true)}>
+                    <span className="settings-icon">⚙️</span>
+                    Settings
+                </button>
             </aside>
 
             {/* Main Chat Area */}
@@ -314,22 +320,6 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
                                 </div>
                             </div>
                         </div>
-                        <button
-                            className="home-update-btn"
-                            onClick={() => window.electronAPI && window.electronAPI.checkForUpdates()}
-                            title="Check for Updates"
-                        >
-                            🔄 Check Updates v{__APP_VERSION__}
-                        </button>
-                        {onDeleteAccount && (
-                            <button
-                                className="home-delete-btn"
-                                onClick={onDeleteAccount}
-                                title="Delete your account and all data"
-                            >
-                                🗑️ Delete Account
-                            </button>
-                        )}
                     </div>
                 ) : (
                     <>
@@ -565,6 +555,14 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
                     <button className="lightbox-close" onClick={() => setLightboxImage(null)}>×</button>
                     <img src={lightboxImage} alt="Full size" className="lightbox-image" onClick={(e) => e.stopPropagation()} />
                 </div>
+            )}
+
+            {/* Settings Modal */}
+            {showSettings && (
+                <SettingsModal
+                    onClose={() => setShowSettings(false)}
+                    onDeleteAccount={onDeleteAccount}
+                />
             )}
         </div>
     );
