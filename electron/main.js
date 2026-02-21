@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Menu, Tray, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
@@ -15,8 +15,10 @@ try {
 
 // Keep a global reference of the window object
 let mainWindow;
+let tray = null;
 let authServer;
 let authResolve = null;
+let isQuitting = false; // True only when user explicitly quits from tray or menu
 
 // Auth server port
 const AUTH_PORT = 47823;
@@ -153,7 +155,14 @@ function createWindow() {
         {
             label: 'File',
             submenu: [
-                { role: 'quit' }
+                {
+                    label: 'Quit',
+                    accelerator: 'CmdOrCtrl+Q',
+                    click: () => {
+                        isQuitting = true;
+                        app.quit();
+                    }
+                }
             ]
         },
         {
@@ -232,6 +241,23 @@ function createWindow() {
         return { action: 'deny' };
     });
 
+    // Minimize to tray instead of closing
+    mainWindow.on('close', (event) => {
+        if (!isQuitting) {
+            event.preventDefault();
+            mainWindow.hide();
+            // Show tray notification on first minimize
+            if (tray && !mainWindow._trayNotified) {
+                tray.displayBalloon({
+                    title: 'DecentraChat',
+                    content: 'App is still running in the background. You will receive messages.',
+                    iconType: 'info'
+                });
+                mainWindow._trayNotified = true;
+            }
+        }
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
@@ -276,6 +302,7 @@ ipcMain.handle('flash-frame', (event, flag) => {
 });
 
 ipcMain.handle('app-exit', () => {
+    isQuitting = true;
     app.quit();
 });
 
@@ -309,6 +336,53 @@ app.whenReady().then(() => {
     }
 
     createWindow();
+
+    // Create system tray
+    const iconPath = isDev
+        ? path.join(__dirname, '../public/icon.png')
+        : path.join(__dirname, '../dist/icon.png');
+
+    let trayIcon;
+    try {
+        trayIcon = nativeImage.createFromPath(iconPath);
+        // Resize for tray (16x16 is standard on Windows)
+        trayIcon = trayIcon.resize({ width: 16, height: 16 });
+    } catch (e) {
+        console.error('Failed to load tray icon:', e);
+        trayIcon = nativeImage.createEmpty();
+    }
+
+    tray = new Tray(trayIcon);
+    tray.setToolTip('DecentraChat — Running in background');
+
+    const trayMenu = Menu.buildFromTemplate([
+        {
+            label: 'Open DecentraChat',
+            click: () => {
+                if (mainWindow) {
+                    mainWindow.show();
+                    mainWindow.focus();
+                }
+            }
+        },
+        { type: 'separator' },
+        {
+            label: 'Quit',
+            click: () => {
+                isQuitting = true;
+                app.quit();
+            }
+        }
+    ]);
+    tray.setContextMenu(trayMenu);
+
+    // Double-click tray icon to restore window
+    tray.on('double-click', () => {
+        if (mainWindow) {
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    });
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -374,12 +448,27 @@ app.whenReady().then(() => {
     }
 });
 
-// Cleanup
+// Don't quit when all windows are closed — app lives in tray
 app.on('window-all-closed', () => {
+    // On macOS, apps typically stay active until explicitly quit
+    // On Windows/Linux, we keep running in tray
+    // Only quit if isQuitting is true (set by tray menu or app-exit IPC)
+    if (isQuitting) {
+        if (authServer) {
+            authServer.close();
+        }
+        app.quit();
+    }
+});
+
+// Ensure clean quit
+app.on('before-quit', () => {
+    isQuitting = true;
     if (authServer) {
         authServer.close();
     }
-    if (process.platform !== 'darwin') {
-        app.quit();
+    if (tray) {
+        tray.destroy();
+        tray = null;
     }
 });
