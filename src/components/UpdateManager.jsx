@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import './UpdateManager.css';
 
+// UpdateManager now only handles download/install overlays when triggered
+// from outside the settings (e.g. auto-update on startup).
+// The startup "no-update" toast is removed.
 export function UpdateManager() {
-    const [status, setStatus] = useState('idle'); // idle, checking, available, no-update, downloading, ready, error
+    const [status, setStatus] = useState('idle');
     const [version, setVersion] = useState('');
     const [progress, setProgress] = useState(0);
     const [isVisible, setIsVisible] = useState(false);
@@ -29,18 +32,17 @@ export function UpdateManager() {
         });
 
         const removeErrorHelper = window.electronAPI.onUpdateError((err) => {
-            console.error("Update error received:", err);
-            setStatus('error');
-            setErrorMessage(err);
-            setIsVisible(true);
+            // Only show overlay for errors if user was already seeing the overlay
+            if (isVisible) {
+                console.error("Update error received:", err);
+                setStatus('error');
+                setErrorMessage(err);
+            }
         });
 
+        // Do NOT show "no-update" toast on startup
         const removeNotAvailableHelper = window.electronAPI.onUpdateNotAvailable(() => {
-            setStatus('no-update');
-            setIsVisible(true);
-            setTimeout(() => {
-                if (status === 'no-update') setIsVisible(false);
-            }, 3000); // Hide after 3s
+            // Silently ignore — the Settings modal handles this inline
         });
 
         return () => {
@@ -51,13 +53,6 @@ export function UpdateManager() {
             if (removeNotAvailableHelper) removeNotAvailableHelper();
         };
     }, []);
-
-    const handleCheck = async () => {
-        setStatus('checking');
-        setIsVisible(true);
-        setErrorMessage('');
-        await window.electronAPI.checkForUpdates();
-    };
 
     const handleDownload = () => {
         window.electronAPI.downloadUpdate();
@@ -73,19 +68,8 @@ export function UpdateManager() {
         setStatus('idle');
     };
 
-    // If strictly idle and not visible, show a floating "Check Update" button maybe? 
-    // Or just suppress. Let's make it always visible for debugging requested by user.
-    // Actually, user wants to debug so let's put a small trigger if hidden?
-    // For now, adhere to original design: hidden unless active. 
-    // BUT we need a way to trigger it. Let's add a small trigger button bottom-right if hidden?
-
-    // Changing behavior: Always return container, but overlay only if active or checking.
-    // Wait, the user can't see "Check for Updates" if it returns null.
-    // I will add a small trigger button fixed at bottom right for now.
-
     return (
         <>
-
             {isVisible && (
                 <div className="update-manager-overlay">
                     <div className="update-card glass-card animate-fadeIn">
@@ -96,8 +80,6 @@ export function UpdateManager() {
 
                         <div className="update-content">
                             {status === 'checking' && <p>Checking for updates...</p>}
-
-                            {status === 'no-update' && <p>You are on the latest version.</p>}
 
                             {status === 'error' && (
                                 <div style={{ color: '#ef4444', marginBottom: '16px' }}>
@@ -118,7 +100,8 @@ export function UpdateManager() {
                                 <>
                                     <p>A new version <strong>{version}</strong> is available.</p>
                                     <div className="update-actions">
-                                        <button className="btn btn-primary" onClick={handleDownload}>Download Check</button>
+                                        <button className="btn btn-primary" onClick={handleDownload}>Download Now</button>
+                                        <button className="btn btn-ghost" onClick={handleLater}>Later</button>
                                     </div>
                                 </>
                             )}

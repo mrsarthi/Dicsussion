@@ -1,4 +1,4 @@
-// SettingsModal - In-app settings panel
+// SettingsModal - In-app settings panel with inline update flow
 import { useState, useEffect } from 'react';
 import './SettingsModal.css';
 
@@ -16,15 +16,69 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
         return parseInt(localStorage.getItem(STORAGE_KEY)) || 15;
     });
 
+    // Update states: idle, checking, available, no-update, downloading, ready, error
+    const [updateStatus, setUpdateStatus] = useState('idle');
+    const [updateVersion, setUpdateVersion] = useState('');
+    const [updateProgress, setUpdateProgress] = useState(0);
+    const [updateError, setUpdateError] = useState('');
+
     useEffect(() => {
         document.documentElement.style.fontSize = `${fontSize}px`;
         localStorage.setItem(STORAGE_KEY, fontSize.toString());
     }, [fontSize]);
 
+    // Listen for update events while settings is open
+    useEffect(() => {
+        if (!window.electronAPI) return;
+
+        const removeAvailable = window.electronAPI.onUpdateAvailable((info) => {
+            setUpdateVersion(info.version);
+            setUpdateStatus('available');
+        });
+
+        const removeNotAvailable = window.electronAPI.onUpdateNotAvailable(() => {
+            setUpdateStatus('no-update');
+        });
+
+        const removeProgress = window.electronAPI.onUpdateProgress((progressObj) => {
+            setUpdateStatus('downloading');
+            setUpdateProgress(progressObj.percent);
+        });
+
+        const removeDownloaded = window.electronAPI.onUpdateDownloaded(() => {
+            setUpdateStatus('ready');
+        });
+
+        const removeError = window.electronAPI.onUpdateError((err) => {
+            setUpdateStatus('error');
+            setUpdateError(err);
+        });
+
+        return () => {
+            if (removeAvailable) removeAvailable();
+            if (removeNotAvailable) removeNotAvailable();
+            if (removeProgress) removeProgress();
+            if (removeDownloaded) removeDownloaded();
+            if (removeError) removeError();
+        };
+    }, []);
+
     const handleCheckUpdate = () => {
-        if (window.electronAPI && window.electronAPI.checkForUpdates) {
-            window.electronAPI.checkForUpdates();
-        }
+        if (!window.electronAPI?.checkForUpdates) return;
+        setUpdateStatus('checking');
+        setUpdateError('');
+        window.electronAPI.checkForUpdates();
+    };
+
+    const handleDownload = () => {
+        if (!window.electronAPI?.downloadUpdate) return;
+        setUpdateStatus('downloading');
+        window.electronAPI.downloadUpdate();
+    };
+
+    const handleInstall = () => {
+        if (!window.electronAPI?.installUpdate) return;
+        window.electronAPI.installUpdate();
     };
 
     // Find nearest preset label
@@ -80,20 +134,82 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
                         </div>
                     </div>
 
-                    {/* Check for Updates */}
+                    {/* Updates — fully inline */}
                     <div className="settings-section">
                         <div className="settings-section-header">
                             <span className="settings-section-icon">🔄</span>
                             <h3>Updates</h3>
                         </div>
-                        <div className="settings-row">
-                            <div>
-                                <p className="settings-description">Current version: v{__APP_VERSION__}</p>
+
+                        {updateStatus === 'idle' && (
+                            <div className="settings-row">
+                                <p className="settings-description" style={{ margin: 0 }}>Current version: v{__APP_VERSION__}</p>
+                                <button className="btn btn-secondary settings-action-btn" onClick={handleCheckUpdate}>
+                                    Check for Updates
+                                </button>
                             </div>
-                            <button className="btn btn-secondary settings-action-btn" onClick={handleCheckUpdate}>
-                                Check for Updates
-                            </button>
-                        </div>
+                        )}
+
+                        {updateStatus === 'checking' && (
+                            <div className="update-inline-status">
+                                <span className="spinner-small"></span>
+                                <span>Checking for updates...</span>
+                            </div>
+                        )}
+
+                        {updateStatus === 'no-update' && (
+                            <div className="update-inline-status success">
+                                <span>✅</span>
+                                <span>You're on the latest version (v{__APP_VERSION__})</span>
+                            </div>
+                        )}
+
+                        {updateStatus === 'available' && (
+                            <div className="update-inline-block">
+                                <p className="update-inline-text">
+                                    🎉 A new version <strong>v{updateVersion}</strong> is available!
+                                </p>
+                                <div className="update-inline-actions">
+                                    <button className="btn btn-primary settings-action-btn" onClick={handleDownload}>
+                                        Download Now
+                                    </button>
+                                    <button className="btn btn-ghost settings-action-btn" onClick={() => setUpdateStatus('idle')}>
+                                        Later
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {updateStatus === 'downloading' && (
+                            <div className="update-inline-block">
+                                <p className="update-inline-text">Downloading update...</p>
+                                <div className="update-progress-bar">
+                                    <div className="update-progress-fill" style={{ width: `${updateProgress}%` }}></div>
+                                </div>
+                                <span className="update-progress-label">{Math.round(updateProgress)}%</span>
+                            </div>
+                        )}
+
+                        {updateStatus === 'ready' && (
+                            <div className="update-inline-block">
+                                <p className="update-inline-text">✅ Update downloaded and ready!</p>
+                                <button className="btn btn-primary settings-action-btn" onClick={handleInstall}>
+                                    Install & Restart
+                                </button>
+                            </div>
+                        )}
+
+                        {updateStatus === 'error' && (
+                            <div className="update-inline-block">
+                                <p className="update-inline-text" style={{ color: '#ef4444' }}>
+                                    ❌ Update check failed
+                                </p>
+                                <code className="update-error-code">{updateError}</code>
+                                <button className="btn btn-secondary settings-action-btn" onClick={handleCheckUpdate} style={{ marginTop: '8px' }}>
+                                    Retry
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Delete Account */}
