@@ -85,22 +85,26 @@ io.on('connection', (socket) => {
 
         console.log(`[✓] Registered: ${normalizedAddress.slice(0, 10)}...${existingUsername ? ` (@${existingUsername})` : ''}`);
 
-        // Deliver any offline messages
-        const pending = offlineMessages.get(normalizedAddress) || [];
-        if (pending.length > 0) {
-            console.log(`[→] Delivering ${pending.length} offline messages to ${normalizedAddress.slice(0, 10)}...`);
-            pending.forEach(msg => {
-                socket.emit('message', msg);
-            });
-            offlineMessages.delete(normalizedAddress);
-        }
-
-        // Notify sender about successful registration
+        // Notify sender about successful registration FIRST
+        // (so client's registerUser() promise resolves and handlers are set up)
         socket.emit('registered', {
             address: normalizedAddress,
             publicKey,
             username: existingUsername
         });
+
+        // THEN deliver any offline messages (handlers are now ready)
+        const pending = offlineMessages.get(normalizedAddress) || [];
+        if (pending.length > 0) {
+            console.log(`[→] Delivering ${pending.length} offline messages to ${normalizedAddress.slice(0, 10)}...`);
+            // Small delay to ensure client-side handlers are fully set up
+            setTimeout(() => {
+                pending.forEach(msg => {
+                    socket.emit('message', msg);
+                });
+            }, 200);
+            offlineMessages.delete(normalizedAddress);
+        }
 
         // Broadcast online status to everyone else
         socket.broadcast.emit('userStatus', {

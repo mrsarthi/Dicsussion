@@ -10,12 +10,14 @@ import {
     getHistory,
     sendTypingStatus,
     onTypingStatus,
-    searchUser
+    searchUser,
+    flushPendingMessages
 } from '../services/messageService';
 import { getStoredKeys } from '../crypto/keyManager';
 import {
     onConnectionChange,
     onUserStatus,
+    onReconnect,
     getUser
 } from '../services/socketService';
 import {
@@ -39,6 +41,8 @@ export function useChat(myAddress) {
     const keysRef = useRef(null);
     const initializedRef = useRef(false);
     const statusUnsubscribeRef = useRef(null);
+    const reconnectUnsubscribeRef = useRef(null);
+    const [flushingOutbox, setFlushingOutbox] = useState(false);
 
     // Keep activeChatRef in sync
     useEffect(() => {
@@ -114,12 +118,14 @@ export function useChat(myAddress) {
             const keys = await getStoredKeys();
             if (!keys || !mounted) return;
             keysRef.current = keys;
-            await registerUser(myAddress, keys.publicKey);
-            if (!mounted) return;
+
+            // IMPORTANT: Set up all message subscriptions BEFORE registering.
+            // The server delivers offline messages immediately on register,
+            // so handlers must be ready before we call registerUser.
 
             // Subscribe to typing status
             onTypingStatus(({ from, isTyping, groupId }) => {
-                const chatId = groupId || from; // If groupId exists, it's a group chat event. Else it's 1-on-1 from sender.
+                const chatId = groupId || from;
 
                 setTypingStatus(prev => {
                     const chatStatus = prev[chatId] || {};
@@ -309,12 +315,102 @@ export function useChat(myAddress) {
                 }
             });
 
+            // NOW register — all handlers are ready to receive offline messages
+            await registerUser(myAddress, keys.publicKey);
+            if (!mounted) return;
+
             initializedRef.current = true;
+
+            // === RECONNECT HANDLER ===
+            // On reconnect: flush outbox + sync missed messages for all contacts
+            reconnectUnsubscribeRef.current = onReconnect(async () => {
+                console.log('🔄 Reconnect detected. Syncing offline messages...');
+
+                // 1. Flush outbox (send queued messages)
+                setFlushingOutbox(true);
+                try {
+                    const result = await flushPendingMessages(myAddress, ({ id, status }) => {
+                        // Update message status in active chat if visible
+                        setMessages(prev => prev.map(m =>
+                            m.id === id ? { ...m, status, transport: 'relay' } : m
+                        ));
+                    });
+                    if (result.sent > 0) {
+                        console.log(`📤 Flushed ${result.sent} queued messages`);
+                    }
+                } catch (err) {
+                    console.error('Outbox flush failed:', err);
+                } finally {
+                    setFlushingOutbox(false);
+                }
+
+                // 2. Sync missed messages for all contacts
+                setContacts(currentContacts => {
+                    // Use the latest contacts state
+                    const contactsToSync = [...currentContacts];
+
+                    // Fire async sync but don't await in the setState
+                    (async () => {
+                        for (const contact of contactsToSync) {
+                            if (contact.isGroup) continue; // Groups use fan-out, skip
+                            try {
+                                const serverHistory = await getHistory(contact.address);
+                                if (serverHistory && serverHistory.length > 0) {
+                                    const localHistory = await getLocalHistory(contact.address);
+                                    const existingIds = new Set(localHistory.map(m => m.id));
+                                    const newMsgs = serverHistory.filter(m => !existingIds.has(m.id));
+
+                                    if (newMsgs.length > 0) {
+                                        await saveMessagesBulk(contact.address, newMsgs);
+                                        console.log(`📥 Synced ${newMsgs.length} missed messages for ${contact.address.slice(0, 10)}`);
+
+                                        // Update unread count for this contact
+                                        const incomingCount = newMsgs.filter(
+                                            m => m.from?.toLowerCase() !== myAddress.toLowerCase()
+                                        ).length;
+
+                                        if (incomingCount > 0) {
+                                            const isActiveChat = activeChatRef.current?.address?.toLowerCase() === contact.address.toLowerCase();
+                                            setContacts(prev => prev.map(c => {
+                                                if (c.address.toLowerCase() === contact.address.toLowerCase()) {
+                                                    return {
+                                                        ...c,
+                                                        unreadCount: isActiveChat ? 0 : (c.unreadCount || 0) + incomingCount,
+                                                        lastMessageTime: Math.max(c.lastMessageTime || 0, ...newMsgs.map(m => m.timestamp))
+                                                    };
+                                                }
+                                                return c;
+                                            }));
+
+                                            // If the active chat is open for this contact, add to visible messages
+                                            if (isActiveChat && keysRef.current) {
+                                                const { decryptReceivedMessage } = await import('../services/messageService');
+                                                for (const msg of newMsgs) {
+                                                    const decrypted = await decryptReceivedMessage(msg, keysRef.current, myAddress);
+                                                    setMessages(prev => {
+                                                        if (prev.some(m => m.id === decrypted.id)) return prev;
+                                                        return [...prev, decrypted].sort((a, b) => a.timestamp - b.timestamp);
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (err) {
+                                console.debug(`Could not sync history for ${contact.address.slice(0, 10)}:`, err.message);
+                            }
+                        }
+                    })();
+
+                    return currentContacts; // Return unchanged for this setState call
+                });
+            });
         })();
 
         return () => {
             mounted = false;
             if (statusUnsubscribeRef.current) statusUnsubscribeRef.current();
+            if (reconnectUnsubscribeRef.current) reconnectUnsubscribeRef.current();
             // Clear typing timeouts
             Object.values(typingTimeoutRef.current).forEach(t => clearTimeout(t));
         };
@@ -506,12 +602,13 @@ export function useChat(myAddress) {
         error,
         connectionType,
         serverConnected,
-        typingStatus, // Export new state
+        typingStatus,
+        flushingOutbox, // Export new state
         openChat,
         closeChat,
         sendMessage,
-        sendTyping, // Export new function
-        createGroup, // Export new function
+        sendTyping,
+        createGroup,
         searchAndAddContact,
         clearError: () => setError(null),
     };

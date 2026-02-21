@@ -11,6 +11,8 @@ let receiptCallback = null;
 let connectionChangeCallback = null;
 let currentUser = null;
 let userStatusListeners = [];
+let reconnectCallbacks = []; // Fired when socket reconnects after a disconnect
+let wasDisconnected = false; // Track if we were previously disconnected
 
 /**
  * Initialize socket connection
@@ -33,10 +35,21 @@ export function initSocket() {
             socket.emit('register', currentUser);
         }
         if (connectionChangeCallback) connectionChangeCallback(true);
+
+        // Fire reconnect callbacks if we were previously disconnected
+        if (wasDisconnected) {
+            console.log('🔄 Reconnected! Firing reconnect callbacks...');
+            wasDisconnected = false;
+            // Small delay to ensure registration completes
+            setTimeout(() => {
+                reconnectCallbacks.forEach(cb => cb());
+            }, 500);
+        }
     });
 
     socket.on('disconnect', () => {
         console.log('❌ Disconnected from signaling server');
+        wasDisconnected = true;
         if (connectionChangeCallback) connectionChangeCallback(false);
     });
 
@@ -214,6 +227,18 @@ export function onUserStatus(callback) {
     userStatusListeners.push(callback);
     return () => {
         userStatusListeners = userStatusListeners.filter(l => l !== callback);
+    };
+}
+
+/**
+ * Subscribe to reconnection events
+ * @param {Function} callback - Called when socket reconnects after disconnect
+ * @returns {Function} unsubscribe function
+ */
+export function onReconnect(callback) {
+    reconnectCallbacks.push(callback);
+    return () => {
+        reconnectCallbacks = reconnectCallbacks.filter(cb => cb !== callback);
     };
 }
 

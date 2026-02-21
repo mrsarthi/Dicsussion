@@ -173,3 +173,63 @@ export async function clearAllData() {
     await messageStore.clear();
     console.log('🗑️ All local chat data cleared');
 }
+
+// ========== OUTBOX (Pending Message Queue) ==========
+
+const OUTBOX_KEY = 'pending_outbox';
+
+/**
+ * Save a message to the outbox for later delivery
+ * @param {Object} message - The full message object (encrypted, with to/from/id)
+ */
+export async function savePendingMessage(message) {
+    if (!message?.id) return;
+    try {
+        const outbox = (await messageStore.getItem(OUTBOX_KEY)) || [];
+        // Avoid duplicates
+        if (outbox.some(m => m.id === message.id)) return;
+        outbox.push({ ...message, queuedAt: Date.now() });
+        await messageStore.setItem(OUTBOX_KEY, outbox);
+        console.debug(`📤 Queued message ${message.id} in outbox. Total: ${outbox.length}`);
+    } catch (err) {
+        console.error('Failed to save to outbox:', err);
+    }
+}
+
+/**
+ * Get all pending messages from the outbox
+ * @returns {Promise<Array>}
+ */
+export async function getPendingMessages() {
+    try {
+        return (await messageStore.getItem(OUTBOX_KEY)) || [];
+    } catch (err) {
+        console.error('Failed to load outbox:', err);
+        return [];
+    }
+}
+
+/**
+ * Remove a message from the outbox after successful send
+ * @param {string} messageId
+ */
+export async function removePendingMessage(messageId) {
+    try {
+        const outbox = (await messageStore.getItem(OUTBOX_KEY)) || [];
+        const filtered = outbox.filter(m => m.id !== messageId);
+        await messageStore.setItem(OUTBOX_KEY, filtered);
+        console.debug(`✅ Removed ${messageId} from outbox. Remaining: ${filtered.length}`);
+    } catch (err) {
+        console.error('Failed to remove from outbox:', err);
+    }
+}
+
+/**
+ * Get pending messages for a specific recipient
+ * @param {string} address - Recipient address
+ * @returns {Promise<Array>}
+ */
+export async function getPendingMessagesForRecipient(address) {
+    const outbox = await getPendingMessages();
+    return outbox.filter(m => m.to?.toLowerCase() === address.toLowerCase());
+}

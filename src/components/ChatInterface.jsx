@@ -16,6 +16,7 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
         connectionType,
         serverConnected,
         typingStatus,
+        flushingOutbox,
         openChat,
         closeChat,
         sendMessage,
@@ -392,6 +393,12 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
 
                         {/* Messages Area */}
                         <div className="messages-container">
+                            {flushingOutbox && (
+                                <div className="flushing-banner animate-fadeIn">
+                                    <span className="spinner-small"></span>
+                                    Sending queued messages...
+                                </div>
+                            )}
                             {isLoading && messages.length === 0 ? (
                                 <div className="loading-messages">
                                     <div className="spinner"></div>
@@ -460,8 +467,8 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
                                                     </span>
                                                 )}
                                                 {msg.from?.toLowerCase() === walletAddress?.toLowerCase() && (
-                                                    <span className={`message-status ${msg.status || 'sent'}`} title={msg.status}>
-                                                        {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
+                                                    <span className={`message-status ${msg.status || 'sent'}`} title={msg.status || 'sent'}>
+                                                        {msg.status === 'pending' ? '🕐' : msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
                                                     </span>
                                                 )}
                                             </div>

@@ -3,6 +3,7 @@ import { encryptMessage, decryptMessage } from '../crypto/crypto';
 import { getStoredKeys } from '../crypto/keyManager';
 import * as socketService from './socketService';
 import * as webrtcService from './webrtcService';
+import { savePendingMessage, getPendingMessages, removePendingMessage } from './storageService';
 
 
 // Track sent message IDs for deduplication
@@ -91,8 +92,35 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
             console.log('📡 Using server relay for message delivery');
             socketService.sendMessage(recipientAddress, payload);
         } else {
-            console.warn('⚠️ Server unreachable and P2P failed. Message could not be sent.');
-            throw new Error('Server unreachable. Cannot send message via relay.');
+            // Queue in outbox for later delivery instead of throwing
+            console.warn('⚠️ Server unreachable and P2P failed. Queuing message in outbox.');
+            const outboxMessage = {
+                ...payload,
+                from: senderAddress,
+                to: recipientAddress,
+                content: plainText,
+                status: 'pending',
+                type: metadata.type || 'text',
+            };
+            await savePendingMessage(outboxMessage);
+            // Return with pending status instead of throwing
+            return {
+                id: messageId,
+                from: senderAddress,
+                to: recipientAddress,
+                content: plainText,
+                encrypted: encryptedData.encrypted,
+                nonce: encryptedData.nonce,
+                senderPublicKey: myKeys.publicKey,
+                senderUsername: senderUsername,
+                replyTo: replyTo,
+                timestamp: Date.now(),
+                status: 'pending',
+                transport: 'queued',
+                groupId: metadata.groupId,
+                groupName: metadata.groupName,
+                type: metadata.type || 'text',
+            };
         }
     }
 
@@ -293,6 +321,58 @@ export async function searchUser(query) {
  */
 export async function getHistory(peerAddress) {
     return await socketService.getHistory(peerAddress);
+}
+
+/**
+ * Flush pending messages from the outbox
+ * Called on reconnect to retry sending queued messages
+ * @param {string} senderAddress - Current user's address
+ * @param {Function} onFlushed - Optional callback for each flushed message { id, status }
+ * @returns {Promise<{ sent: number, failed: number }>}
+ */
+export async function flushPendingMessages(senderAddress, onFlushed = null) {
+    const pending = await getPendingMessages();
+    if (pending.length === 0) return { sent: 0, failed: 0 };
+
+    console.log(`📤 Flushing ${pending.length} pending messages from outbox...`);
+    let sent = 0;
+    let failed = 0;
+
+    for (const msg of pending) {
+        try {
+            // Re-send via the server relay (it's available now since we just reconnected)
+            if (socketService.isConnected()) {
+                // Build a relay payload from the stored message
+                const relayPayload = {
+                    id: msg.id,
+                    encrypted: msg.encrypted,
+                    nonce: msg.nonce,
+                    senderPublicKey: msg.senderPublicKey,
+                    senderUsername: msg.senderUsername,
+                    replyTo: msg.replyTo,
+                    timestamp: msg.timestamp,
+                    groupId: msg.groupId,
+                    groupName: msg.groupName,
+                    from: msg.from,
+                    type: msg.type || 'text',
+                };
+
+                socketService.sendMessage(msg.to, relayPayload);
+                await removePendingMessage(msg.id);
+                sent++;
+                console.log(`✅ Flushed message ${msg.id} to ${msg.to?.slice(0, 10)}`);
+                if (onFlushed) onFlushed({ id: msg.id, status: 'sent' });
+            } else {
+                failed++;
+            }
+        } catch (err) {
+            console.error(`❌ Failed to flush message ${msg.id}:`, err);
+            failed++;
+        }
+    }
+
+    console.log(`📤 Outbox flush complete: ${sent} sent, ${failed} failed`);
+    return { sent, failed };
 }
 
 /**
