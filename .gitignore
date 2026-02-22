@@ -44,3 +44,6 @@ dist-ssr
 
 # Local Build Scripts
 build-dist.js
+
+# Future Release Automation
+.github/workflows/release.yml

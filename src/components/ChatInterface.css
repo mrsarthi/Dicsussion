@@ -552,6 +552,13 @@
     border-radius: var(--radius-md);
     cursor: pointer;
     box-shadow: var(--shadow-md);
+    z-index: 100;
+    max-width: 90%;
+    font-size: 0.85rem;
+}
+
+.error-toast.info-toast {
+    background: rgba(99, 102, 241, 0.9);
 }
 
 .close-btn {

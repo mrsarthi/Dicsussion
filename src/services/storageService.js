@@ -177,23 +177,29 @@ export async function clearAllData() {
 // ========== OUTBOX (Pending Message Queue) ==========
 
 const OUTBOX_KEY = 'pending_outbox';
+const outboxMutex = new Mutex();
 
 /**
  * Save a message to the outbox for later delivery
- * @param {Object} message - The full message object (encrypted, with to/from/id)
+ * @param {Object} message - The full message object (with to/from/id/content)
  */
 export async function savePendingMessage(message) {
     if (!message?.id) return;
-    try {
-        const outbox = (await messageStore.getItem(OUTBOX_KEY)) || [];
-        // Avoid duplicates
-        if (outbox.some(m => m.id === message.id)) return;
-        outbox.push({ ...message, queuedAt: Date.now() });
-        await messageStore.setItem(OUTBOX_KEY, outbox);
-        console.debug(`📤 Queued message ${message.id} in outbox. Total: ${outbox.length}`);
-    } catch (err) {
-        console.error('Failed to save to outbox:', err);
-    }
+    return outboxMutex.lock(async () => {
+        try {
+            const outbox = (await messageStore.getItem(OUTBOX_KEY)) || [];
+            // Avoid duplicates
+            if (outbox.some(m => m.id === message.id)) {
+                console.debug('⚠️ Duplicate outbox message ignored:', message.id);
+                return;
+            }
+            outbox.push({ ...message, queuedAt: Date.now() });
+            await messageStore.setItem(OUTBOX_KEY, outbox);
+            console.debug(`📤 Queued message ${message.id} in outbox. Total: ${outbox.length}`);
+        } catch (err) {
+            console.error('Failed to save to outbox:', err);
+        }
+    });
 }
 
 /**
@@ -214,14 +220,16 @@ export async function getPendingMessages() {
  * @param {string} messageId
  */
 export async function removePendingMessage(messageId) {
-    try {
-        const outbox = (await messageStore.getItem(OUTBOX_KEY)) || [];
-        const filtered = outbox.filter(m => m.id !== messageId);
-        await messageStore.setItem(OUTBOX_KEY, filtered);
-        console.debug(`✅ Removed ${messageId} from outbox. Remaining: ${filtered.length}`);
-    } catch (err) {
-        console.error('Failed to remove from outbox:', err);
-    }
+    return outboxMutex.lock(async () => {
+        try {
+            const outbox = (await messageStore.getItem(OUTBOX_KEY)) || [];
+            const filtered = outbox.filter(m => m.id !== messageId);
+            await messageStore.setItem(OUTBOX_KEY, filtered);
+            console.debug(`✅ Removed ${messageId} from outbox. Remaining: ${filtered.length}`);
+        } catch (err) {
+            console.error('Failed to remove from outbox:', err);
+        }
+    });
 }
 
 /**

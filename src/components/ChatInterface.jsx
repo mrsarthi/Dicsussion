@@ -539,11 +539,11 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
                     </>
                 )}
 
-                {/* Error Toast */}
+                {/* Error / Info Toast */}
                 {error && (
-                    <div className="error-toast animate-fadeIn" onClick={clearError}>
-                        <span className="error-icon">⚠️</span>
-                        <span>{error}</span>
+                    <div className={`error-toast animate-fadeIn ${error.level === 'info' ? 'info-toast' : ''}`} onClick={clearError}>
+                        <span className="error-icon">{error.level === 'info' ? '💬' : '⚠️'}</span>
+                        <span>{typeof error === 'string' ? error : error.message}</span>
                         <button className="close-btn">×</button>
                     </div>
                 )}

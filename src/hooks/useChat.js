@@ -181,11 +181,11 @@ export function useChat(myAddress) {
                     console.error('❌ Failed to persist incoming message:', err);
                 }
 
-                // Send delivery receipt (only for DMs or if logic allows - for groups simpler to skip or handle carefully)
-                // For now, send receipt only if DM to avoid storm
+                // Send delivery receipt (only for DMs to avoid storm)
                 if (!msg.groupId && msg.from && msg.from.toLowerCase() !== myAddress.toLowerCase()) {
                     sendDeliveryReceipt(msg.from, msg.id);
-                    if (activeChatRef.current?.address?.toLowerCase() === msg.from.toLowerCase()) {
+                    // Only send read receipt if window is focused AND this chat is open
+                    if (document.hasFocus() && activeChatRef.current?.address?.toLowerCase() === msg.from.toLowerCase()) {
                         sendReadReceipt(msg.from, msg.id);
                     }
                 }
@@ -301,10 +301,8 @@ export function useChat(myAddress) {
             });
 
             statusUnsubscribeRef.current = onUserStatus(({ address, online, lastSeen }) => {
-                // Update contacts ...
+                // Update contacts
                 setContacts(prev => prev.map(c => {
-                    // For groups, we might want to track individual user status, but complex.
-                    // For now, only update DM contacts.
                     if (!c.isGroup && c.address.toLowerCase() === address.toLowerCase()) {
                         return { ...c, online, lastSeen };
                     }
@@ -312,6 +310,15 @@ export function useChat(myAddress) {
                 }));
                 if (activeChatRef.current?.address?.toLowerCase() === address.toLowerCase()) {
                     setActiveChat(prev => ({ ...prev, info: { ...prev.info, online, lastSeen } }));
+                }
+
+                // When a contact comes online, flush any queued messages for them
+                if (online && myAddress) {
+                    flushPendingMessages(myAddress, ({ id, status }) => {
+                        setMessages(prev => prev.map(m =>
+                            m.id === id ? { ...m, status, transport: 'relay' } : m
+                        ));
+                    }).catch(err => console.debug('Flush on status change failed:', err));
                 }
             });
 
@@ -407,8 +414,26 @@ export function useChat(myAddress) {
             });
         })();
 
+        // Send read receipts when window gains focus
+        const handleFocus = () => {
+            const chat = activeChatRef.current;
+            if (!chat || chat.isGroup) return;
+
+            // Get current messages and send read receipts for unread incoming ones
+            setMessages(prev => {
+                const unread = prev.filter(m =>
+                    m.from?.toLowerCase() === chat.address?.toLowerCase() &&
+                    m.status !== 'read'
+                );
+                unread.forEach(m => sendReadReceipt(m.from, m.id));
+                return prev;
+            });
+        };
+        window.addEventListener('focus', handleFocus);
+
         return () => {
             mounted = false;
+            window.removeEventListener('focus', handleFocus);
             if (statusUnsubscribeRef.current) statusUnsubscribeRef.current();
             if (reconnectUnsubscribeRef.current) reconnectUnsubscribeRef.current();
             // Clear typing timeouts
@@ -475,7 +500,7 @@ export function useChat(myAddress) {
                 return sentMessage;
             }
         } catch (err) {
-            setError(err.message);
+            setError({ message: err.message, level: err.level || 'error' });
             throw err;
         }
     }, [activeChat, myAddress]);

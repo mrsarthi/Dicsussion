@@ -49,7 +49,31 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
     let recipientPubKey = await socketService.getPublicKey(recipientAddress);
 
     if (!recipientPubKey) {
-        throw new Error(`Recipient ${recipientAddress} not found. They need to connect to DecentraChat first.`);
+        // User is offline/not registered — queue message for later instead of blocking
+        const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const senderUsername = localStorage.getItem('decentrachat_username') || null;
+
+        const outboxMessage = {
+            id: messageId,
+            from: senderAddress,
+            to: recipientAddress,
+            content: plainText,
+            senderPublicKey: myKeys.publicKey,
+            senderUsername: senderUsername,
+            replyTo: replyTo,
+            timestamp: Date.now(),
+            status: 'pending',
+            transport: 'queued',
+            groupId: metadata.groupId,
+            groupName: metadata.groupName,
+            type: metadata.type || 'text',
+        };
+        await savePendingMessage(outboxMessage);
+
+        // Throw a soft info-level error so the UI can display a friendly toast
+        const err = new Error('This user is currently offline. Your message will be delivered when they come back online.');
+        err.level = 'info';
+        throw err;
     }
 
     // Encrypt the message
@@ -325,7 +349,9 @@ export async function getHistory(peerAddress) {
 
 /**
  * Flush pending messages from the outbox
- * Called on reconnect to retry sending queued messages
+ * Called on reconnect to retry sending queued messages.
+ * Messages queued while the recipient was offline only have plaintext,
+ * so we must encrypt them now that the recipient's key may be available.
  * @param {string} senderAddress - Current user's address
  * @param {Function} onFlushed - Optional callback for each flushed message { id, status }
  * @returns {Promise<{ sent: number, failed: number }>}
@@ -338,33 +364,57 @@ export async function flushPendingMessages(senderAddress, onFlushed = null) {
     let sent = 0;
     let failed = 0;
 
+    const myKeys = await getStoredKeys();
+    if (!myKeys) {
+        console.error('❌ Cannot flush: no encryption keys');
+        return { sent: 0, failed: pending.length };
+    }
+
     for (const msg of pending) {
         try {
-            // Re-send via the server relay (it's available now since we just reconnected)
-            if (socketService.isConnected()) {
-                // Build a relay payload from the stored message
-                const relayPayload = {
-                    id: msg.id,
-                    encrypted: msg.encrypted,
-                    nonce: msg.nonce,
-                    senderPublicKey: msg.senderPublicKey,
-                    senderUsername: msg.senderUsername,
-                    replyTo: msg.replyTo,
-                    timestamp: msg.timestamp,
-                    groupId: msg.groupId,
-                    groupName: msg.groupName,
-                    from: msg.from,
-                    type: msg.type || 'text',
-                };
-
-                socketService.sendMessage(msg.to, relayPayload);
-                await removePendingMessage(msg.id);
-                sent++;
-                console.log(`✅ Flushed message ${msg.id} to ${msg.to?.slice(0, 10)}`);
-                if (onFlushed) onFlushed({ id: msg.id, status: 'sent' });
-            } else {
+            if (!socketService.isConnected()) {
                 failed++;
+                continue;
             }
+
+            let encrypted = msg.encrypted;
+            let nonce = msg.nonce;
+
+            // If the message was queued without encryption (recipient was offline),
+            // encrypt it now using the recipient's public key
+            if (!encrypted && msg.content) {
+                const recipientPubKey = await socketService.getPublicKey(msg.to);
+                if (!recipientPubKey) {
+                    // Recipient still not available — keep in outbox
+                    console.log(`⏳ Recipient ${msg.to?.slice(0, 10)} still offline, keeping in outbox`);
+                    failed++;
+                    continue;
+                }
+
+                const encryptedData = encryptMessage(msg.content, recipientPubKey, myKeys.secretKey);
+                encrypted = encryptedData.encrypted;
+                nonce = encryptedData.nonce;
+            }
+
+            const relayPayload = {
+                id: msg.id,
+                encrypted: encrypted,
+                nonce: nonce,
+                senderPublicKey: msg.senderPublicKey || myKeys.publicKey,
+                senderUsername: msg.senderUsername,
+                replyTo: msg.replyTo,
+                timestamp: msg.timestamp,
+                groupId: msg.groupId,
+                groupName: msg.groupName,
+                from: msg.from,
+                type: msg.type || 'text',
+            };
+
+            socketService.sendMessage(msg.to, relayPayload);
+            await removePendingMessage(msg.id);
+            sent++;
+            console.log(`✅ Flushed message ${msg.id} to ${msg.to?.slice(0, 10)}`);
+            if (onFlushed) onFlushed({ id: msg.id, status: 'sent' });
         } catch (err) {
             console.error(`❌ Failed to flush message ${msg.id}:`, err);
             failed++;
