@@ -1,7 +1,7 @@
 {
   "name": "decentrachat",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Decentralized end-to-end encrypted messaging app with blockchain identity",
   "author": "DecentraChat",
   "main": "electron/main.js",

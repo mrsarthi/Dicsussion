@@ -10,7 +10,8 @@
 
 /* Sidebar */
 .sidebar {
-    width: 20rem;
+    width: 280px;
+    min-width: 280px;
     display: flex;
     flex-direction: column;
     border-radius: 0;
@@ -122,8 +123,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--space-xl);
+    padding: 24px;
     position: relative;
+    overflow-y: auto;
     background: radial-gradient(circle at center, rgba(99, 102, 241, 0.03) 0%, transparent 70%);
 }
 
@@ -131,19 +133,20 @@
     text-align: center;
     max-width: 600px;
     width: 100%;
+    margin: auto;
     animation: fadeIn 0.5s ease-out;
 }
 
 .no-chat-icon {
-    font-size: 3.5rem;
-    margin-bottom: var(--space-lg);
+    font-size: 48px;
+    margin-bottom: 16px;
     filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.3));
 }
 
 .no-chat-content h2 {
-    font-size: 2rem;
+    font-size: 28px;
     font-weight: 700;
-    margin-bottom: var(--space-xs);
+    margin-bottom: 4px;
     background: var(--accent-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -212,8 +215,8 @@
 .features-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-lg);
-    margin-top: var(--space-xl);
+    gap: 16px;
+    margin-top: 24px;
 }
 
 .feature-card {
@@ -221,11 +224,11 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: var(--space-md);
-    padding: var(--space-xl);
+    gap: 12px;
+    padding: 24px 16px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
+    border-radius: 12px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     height: 100%;
 }
@@ -238,17 +241,17 @@
 }
 
 .feature-emoji {
-    font-size: 1.8rem;
+    font-size: 26px;
     background: rgba(255, 255, 255, 0.05);
-    padding: 0.75rem;
+    padding: 10px;
     border-radius: 50%;
-    margin-bottom: 0.25rem;
+    margin-bottom: 2px;
 }
 
 .feature-card span:last-child {
     font-weight: 500;
     color: var(--text-primary);
-    font-size: 0.95rem;
+    font-size: 14px;
 }
 
 /* Chat Header */
@@ -570,7 +573,7 @@
         bottom: 0;
         z-index: 10;
         width: 100%;
-        max-width: 20rem;
+        max-width: 280px;
         transform: translateX(-100%);
         transition: transform var(--transition-normal);
     }
