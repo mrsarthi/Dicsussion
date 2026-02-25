@@ -39,6 +39,9 @@ export async function registerUser(address, publicKey) {
  * @returns {Promise<Object>} The sent message object
  */
 export async function sendEncryptedMessage(senderAddress, recipientAddress, plainText, replyTo = null, metadata = {}) {
+    // Capture timestamp ONCE so all copies of this message share the same value
+    const now = Date.now();
+
     // Get our keys
     const myKeys = await getStoredKeys();
     if (!myKeys) {
@@ -50,7 +53,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
 
     if (!recipientPubKey) {
         // User is offline/not registered — queue message for later instead of blocking
-        const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const messageId = `msg_${now}_${Math.random().toString(36).substr(2, 9)}`;
         const senderUsername = localStorage.getItem('decentrachat_username') || null;
 
         const outboxMessage = {
@@ -61,7 +64,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
             senderPublicKey: myKeys.publicKey,
             senderUsername: senderUsername,
             replyTo: replyTo,
-            timestamp: Date.now(),
+            timestamp: now,
             status: 'pending',
             transport: 'queued',
             groupId: metadata.groupId,
@@ -83,7 +86,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
     const senderUsername = localStorage.getItem('decentrachat_username') || null;
 
     // Build message payload
-    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const messageId = `msg_${now}_${Math.random().toString(36).substr(2, 9)}`;
     const payload = {
         id: messageId,
         encrypted: encryptedData.encrypted,
@@ -91,7 +94,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         senderPublicKey: myKeys.publicKey,
         senderUsername: senderUsername,
         replyTo: replyTo,
-        timestamp: Date.now(),
+        timestamp: now,
         // Group metadata
         groupId: metadata.groupId,
         groupName: metadata.groupName,
@@ -138,7 +141,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
                 senderPublicKey: myKeys.publicKey,
                 senderUsername: senderUsername,
                 replyTo: replyTo,
-                timestamp: Date.now(),
+                timestamp: now,
                 status: 'pending',
                 transport: 'queued',
                 groupId: metadata.groupId,
@@ -158,7 +161,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         senderPublicKey: myKeys.publicKey,
         senderUsername: senderUsername,
         replyTo: replyTo,
-        timestamp: Date.now(),
+        timestamp: now,
         status: 'sent',
         transport: p2pSent ? 'p2p' : 'relay',
         groupId: metadata.groupId,

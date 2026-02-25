@@ -396,7 +396,13 @@ export function useChat(myAddress) {
                                                     const decrypted = await decryptReceivedMessage(msg, keysRef.current, myAddress);
                                                     setMessages(prev => {
                                                         if (prev.some(m => m.id === decrypted.id)) return prev;
-                                                        return [...prev, decrypted].sort((a, b) => a.timestamp - b.timestamp);
+                                                        return [...prev, decrypted].sort((a, b) => {
+                                                            const aTime = a.savedAt || a.timestamp;
+                                                            const bTime = b.savedAt || b.timestamp;
+                                                            const timeDiff = aTime - bTime;
+                                                            if (timeDiff !== 0) return timeDiff;
+                                                            return (a.id || '').localeCompare(b.id || '');
+                                                        });
                                                     });
                                                 }
                                             }
@@ -554,11 +560,18 @@ export function useChat(myAddress) {
 
             // 2. Fetch Server History (if available)
             try {
-                const serverHistory = await getHistory(myAddress, address);
+                const serverHistory = await getHistory(address);
                 // Merge and deduplicate
                 const existingIds = new Set(merged.map(m => m.id));
                 const newServerMsgs = serverHistory.filter(m => !existingIds.has(m.id));
-                merged = [...merged, ...newServerMsgs].sort((a, b) => a.timestamp - b.timestamp);
+                merged = [...merged, ...newServerMsgs].sort((a, b) => {
+                    // Sort by savedAt (local device time) to avoid cross-device clock skew
+                    const aTime = a.savedAt || a.timestamp;
+                    const bTime = b.savedAt || b.timestamp;
+                    const timeDiff = aTime - bTime;
+                    if (timeDiff !== 0) return timeDiff;
+                    return (a.id || '').localeCompare(b.id || '');
+                });
 
                 // Save new messages to local for next time
                 if (newServerMsgs.length > 0) {

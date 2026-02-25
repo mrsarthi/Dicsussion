@@ -29,6 +29,18 @@ function getMutex(key) {
 const MAX_HISTORY_PER_CHAT = 1000;
 
 /**
+ * Sort comparator: use savedAt (local device time) for ordering,
+ * falling back to timestamp for legacy messages without savedAt.
+ */
+function messageSort(a, b) {
+    const aTime = a.savedAt || a.timestamp;
+    const bTime = b.savedAt || b.timestamp;
+    const timeDiff = aTime - bTime;
+    if (timeDiff !== 0) return timeDiff;
+    return (a.id || '').localeCompare(b.id || '');
+}
+
+/**
  * Save a message to local history
  * @param {string} chatId - Address of user or Group ID
  * @param {Object} message - The message object
@@ -42,7 +54,6 @@ export async function saveMessage(chatId, message) {
 
     return getMutex(key).lock(async () => {
         try {
-            // console.debug(`💾 (Mutex) Saving message to ${key}:`, message.id);
             const history = (await messageStore.getItem(key)) || [];
 
             // Deduplicate
@@ -51,8 +62,11 @@ export async function saveMessage(chatId, message) {
                 return;
             }
 
-            const newHistory = [...history, message]
-                .sort((a, b) => a.timestamp - b.timestamp)
+            // Stamp with local device time to avoid cross-device clock skew
+            const stamped = { ...message, savedAt: message.savedAt || Date.now() };
+
+            const newHistory = [...history, stamped]
+                .sort(messageSort)
                 .slice(-MAX_HISTORY_PER_CHAT); // Keep size manageable
 
             await messageStore.setItem(key, newHistory);
@@ -100,12 +114,16 @@ export async function saveMessagesBulk(chatId, messages) {
 
             if (toAdd.length === 0) return;
 
-            const newHistory = [...history, ...toAdd]
-                .sort((a, b) => a.timestamp - b.timestamp)
+            // Stamp each with local device time
+            const now = Date.now();
+            const stamped = toAdd.map((m, i) => ({ ...m, savedAt: m.savedAt || (now + i) }));
+
+            const newHistory = [...history, ...stamped]
+                .sort(messageSort)
                 .slice(-MAX_HISTORY_PER_CHAT);
 
             await messageStore.setItem(key, newHistory);
-            console.debug(`✅ Bulk saved ${toAdd.length} msgs to ${key}`);
+            console.debug(`✅ Bulk saved ${stamped.length} msgs to ${key}`);
         } catch (err) {
             console.error('Failed to save bulk messages:', err);
         }
