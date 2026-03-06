@@ -71,6 +71,11 @@ app.post('/api/auth/callback', (req, res) => {
 
     // Broadcast the signature to specifically the room that requested it!
     io.to(`auth_${sessionId}`).emit('wallet_auth_result', { address, signature });
+
+    // Debug: Check if anyone is actually in the room
+    const clients = io.sockets.adapter.rooms.get(`auth_${sessionId}`);
+    console.log(`[📡] Relayed to session ${sessionId}. Clients in room: ${clients ? clients.size : 0}`);
+
     res.json({ success: true });
 });
 

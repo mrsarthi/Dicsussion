@@ -13,6 +13,7 @@ let currentUser = null;
 let userStatusListeners = [];
 let reconnectCallbacks = []; // Fired when socket reconnects after a disconnect
 let wasDisconnected = false; // Track if we were previously disconnected
+let activeAuthSessionId = null; // Track active auth relay session to handle reconnections
 
 /**
  * Initialize socket connection
@@ -34,6 +35,13 @@ export function initSocket() {
             console.log('🔄 Re-registering session...');
             socket.emit('register', currentUser);
         }
+
+        // Re-join auth room if we were waiting for login (crucial for mobile backgrounding)
+        if (activeAuthSessionId) {
+            console.log('🔄 Re-joining auth room after reconnect:', activeAuthSessionId);
+            socket.emit('join_auth_room', { sessionId: activeAuthSessionId });
+        }
+
         if (connectionChangeCallback) connectionChangeCallback(true);
 
         // Fire reconnect callbacks if we were previously disconnected
@@ -352,12 +360,22 @@ export function getHistory(peerAddress) {
  */
 export function listenForAuth(sessionId) {
     if (!socket?.connected) initSocket();
+    activeAuthSessionId = sessionId;
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+        // 2 minute timeout - mobile auth can take a while if the user is slow in MetaMask
+        const timeout = setTimeout(() => {
+            socket.off('wallet_auth_result', handler);
+            activeAuthSessionId = null;
+            reject(new Error('Authentication timed out after 2 minutes. Please try again.'));
+        }, 120000);
+
         const handler = (data) => {
+            clearTimeout(timeout);
             console.log('✅ Received Auth Result via WebSocket Relay!');
             socket.off('wallet_auth_result', handler);
             socket.emit('leave_auth_room', { sessionId });
+            activeAuthSessionId = null;
             resolve(data);
         };
         socket.on('wallet_auth_result', handler);

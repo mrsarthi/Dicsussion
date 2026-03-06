@@ -205,7 +205,7 @@
 
                 // If we have a sessionId, use the WebSocket relay (robust mobile flow)
                 if (sessionId) {
-                    showStatus('✅ Signature complete! Relaying to app...', 'success');
+                    showStatus(`✅ Signature complete! Relaying to session ${sessionId.substring(0, 8)}...`, 'success');
 
                     const relayResponse = await fetch('/api/auth/callback', {
                         method: 'POST',

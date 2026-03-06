@@ -87,9 +87,11 @@ export async function openAuthBrowser() {
             if (_walletAuthCallback) {
                 _walletAuthCallback({ address: result.address, signature: result.signature });
             }
-        } catch (e) { console.error("WebSocket auth error", e); }
-
-        return null; // result comes back via _walletAuthCallback deep-link listener
+            return result;
+        } catch (e) {
+            console.error("WebSocket auth error", e);
+            return null;
+        }
     }
 
     return null; // browser — no separate auth needed
