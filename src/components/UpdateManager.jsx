@@ -1,5 +1,15 @@
 import { useState, useEffect } from 'react';
 import './UpdateManager.css';
+import {
+    hasUpdateSupport,
+    onUpdateAvailable,
+    onUpdateProgress,
+    onUpdateDownloaded,
+    onUpdateError,
+    onUpdateNotAvailable,
+    downloadUpdate,
+    installUpdate,
+} from '../services/platformService';
 
 // UpdateManager now only handles download/install overlays when triggered
 // from outside the settings (e.g. auto-update on startup).
@@ -12,26 +22,26 @@ export function UpdateManager() {
     const [errorMessage, setErrorMessage] = useState('');
 
     useEffect(() => {
-        if (!window.electronAPI) return;
+        if (!hasUpdateSupport) return;
 
-        const removeAvailableHelper = window.electronAPI.onUpdateAvailable((info) => {
+        const removeAvailableHelper = onUpdateAvailable((info) => {
             setVersion(info.version);
             setStatus('available');
             setIsVisible(true);
         });
 
-        const removeProgressHelper = window.electronAPI.onUpdateProgress((progressObj) => {
+        const removeProgressHelper = onUpdateProgress((progressObj) => {
             setStatus('downloading');
             setProgress(progressObj.percent);
             setIsVisible(true);
         });
 
-        const removeDownloadedHelper = window.electronAPI.onUpdateDownloaded(() => {
+        const removeDownloadedHelper = onUpdateDownloaded(() => {
             setStatus('ready');
             setIsVisible(true);
         });
 
-        const removeErrorHelper = window.electronAPI.onUpdateError((err) => {
+        const removeErrorHelper = onUpdateError((err) => {
             // Only show overlay for errors if user was already seeing the overlay
             if (isVisible) {
                 console.error("Update error received:", err);
@@ -41,7 +51,7 @@ export function UpdateManager() {
         });
 
         // Do NOT show "no-update" toast on startup
-        const removeNotAvailableHelper = window.electronAPI.onUpdateNotAvailable(() => {
+        const removeNotAvailableHelper = onUpdateNotAvailable(() => {
             // Silently ignore — the Settings modal handles this inline
         });
 
@@ -55,12 +65,12 @@ export function UpdateManager() {
     }, []);
 
     const handleDownload = () => {
-        window.electronAPI.downloadUpdate();
+        downloadUpdate();
         setStatus('downloading');
     };
 
     const handleInstall = () => {
-        window.electronAPI.installUpdate();
+        installUpdate();
     };
 
     const handleLater = () => {

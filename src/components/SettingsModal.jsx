@@ -1,6 +1,17 @@
 // SettingsModal - In-app settings panel with inline update flow
 import { useState, useEffect } from 'react';
 import './SettingsModal.css';
+import {
+    hasUpdateSupport,
+    onUpdateAvailable,
+    onUpdateProgress,
+    onUpdateDownloaded,
+    onUpdateError,
+    onUpdateNotAvailable,
+    checkForUpdates,
+    downloadUpdate,
+    installUpdate,
+} from '../services/platformService';
 
 const FONT_SIZES = [
     { label: 'Small', value: 13 },
@@ -29,27 +40,27 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
 
     // Listen for update events while settings is open
     useEffect(() => {
-        if (!window.electronAPI) return;
+        if (!hasUpdateSupport) return;
 
-        const removeAvailable = window.electronAPI.onUpdateAvailable((info) => {
+        const removeAvailable = onUpdateAvailable((info) => {
             setUpdateVersion(info.version);
             setUpdateStatus('available');
         });
 
-        const removeNotAvailable = window.electronAPI.onUpdateNotAvailable(() => {
+        const removeNotAvailable = onUpdateNotAvailable(() => {
             setUpdateStatus('no-update');
         });
 
-        const removeProgress = window.electronAPI.onUpdateProgress((progressObj) => {
+        const removeProgress = onUpdateProgress((progressObj) => {
             setUpdateStatus('downloading');
             setUpdateProgress(progressObj.percent);
         });
 
-        const removeDownloaded = window.electronAPI.onUpdateDownloaded(() => {
+        const removeDownloaded = onUpdateDownloaded(() => {
             setUpdateStatus('ready');
         });
 
-        const removeError = window.electronAPI.onUpdateError((err) => {
+        const removeError = onUpdateError((err) => {
             setUpdateStatus('error');
             setUpdateError(err);
         });
@@ -64,21 +75,21 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
     }, []);
 
     const handleCheckUpdate = () => {
-        if (!window.electronAPI?.checkForUpdates) return;
+        if (!hasUpdateSupport) return;
         setUpdateStatus('checking');
         setUpdateError('');
-        window.electronAPI.checkForUpdates();
+        checkForUpdates();
     };
 
     const handleDownload = () => {
-        if (!window.electronAPI?.downloadUpdate) return;
+        if (!hasUpdateSupport) return;
         setUpdateStatus('downloading');
-        window.electronAPI.downloadUpdate();
+        downloadUpdate();
     };
 
     const handleInstall = () => {
-        if (!window.electronAPI?.installUpdate) return;
-        window.electronAPI.installUpdate();
+        if (!hasUpdateSupport) return;
+        installUpdate();
     };
 
     // Find nearest preset label

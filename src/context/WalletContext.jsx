@@ -1,5 +1,5 @@
 // WalletContext - Shared wallet state across the app
-// Supports both browser (MetaMask) and Electron (hybrid) authentication
+// Supports browser (MetaMask), Electron (hybrid), and Capacitor (mobile) authentication
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
     connectWallet as browserConnectWallet,
@@ -11,11 +11,12 @@ import {
 } from '../blockchain/web3Provider';
 import { getOrCreateKeys, clearKeys, getStoredKeys, storeKeysFromSignature } from '../crypto/keyManager';
 import { register as registerUser } from '../services/socketService';
+import { platform, openAuthBrowser, onWalletAuth } from '../services/platformService';
 
 const WalletContext = createContext(null);
 
-// Check if running in Electron
-const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+// Check if running in a native app shell (Electron or Capacitor)
+const isElectron = platform.isNativeApp;
 
 export function WalletProvider({ children }) {
     const [address, setAddress] = useState(null);
@@ -33,7 +34,7 @@ export function WalletProvider({ children }) {
             setIsWeb3Detected(true); // Always show connect button in Electron
 
             // Listen for auth from browser
-            window.electronAPI.onWalletAuth(async (data) => {
+            onWalletAuth(async (data) => {
                 console.log('Received wallet auth:', data.address);
                 await handleElectronAuth(data);
             });
@@ -112,7 +113,7 @@ export function WalletProvider({ children }) {
         try {
             if (isElectron) {
                 // Open browser for MetaMask auth
-                const authResult = await window.electronAPI.openAuthBrowser();
+                const authResult = await openAuthBrowser();
                 if (authResult) {
                     await handleElectronAuth(authResult);
                 } else {

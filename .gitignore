@@ -12,6 +12,11 @@ test-connection.js
 release/
 electron/dist/
 
+# Android build output (native project is tracked, but build artifacts aren't)
+android/app/build/
+android/.gradle/
+android/capacitor-cordova-android-plugins/build/
+
 # Logs
 logs
 *.log
@@ -47,3 +52,19 @@ build-dist.js
 
 # Future Release Automation
 .github/workflows/release.yml
+
+# OS Generated Files
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Android Signing Keys (Secrets)
+*.jks
+*.keystore
+
+# Linter Caches
+.eslintcache
+.stylelintcache

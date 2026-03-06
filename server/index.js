@@ -5,8 +5,13 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
+const path = require('path');
+
 const app = express();
 app.use(cors());
+
+// Serve static Auth Page for Mobile Deep Linking
+app.use(express.static(path.join(__dirname, 'public')));
 
 const server = http.createServer(app);
 const io = new Server(server, {
