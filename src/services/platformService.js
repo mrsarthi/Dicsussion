@@ -44,12 +44,33 @@ export async function openAuthBrowser() {
         const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'https://decentrachat-singnalling.onrender.com';
         let authHostUrl = SERVER_URL + '/auth.html?nonce=' + Date.now() + '&platform=capacitor';
 
-        // Use MetaMask Universal Link
-        // If they don't have MetaMask installed, it redirects them to the download page
-        const cleanAuthUrl = authHostUrl.replace(/^https?:\/\//, '');
-        const metamaskDeepLink = `https://metamask.app.link/dapp/${cleanAuthUrl}`;
+        // MetaMask requires the full URL to be properly encoded for its dapp deep links
+        const encodedUrl = encodeURIComponent(authHostUrl);
 
-        await Browser.open({ url: metamaskDeepLink, windowName: '_system' });
+        // 1. Try the official Universal Link (used as a fallback to trigger Play Store download)
+        const metamaskUniversalLink = `https://metamask.app.link/dapp/${authHostUrl}`;
+
+        // 2. Try the classic dapp:// link natively via AppLauncher
+        // dapp:// requires the protocol stripped
+        const cleanAuthUrl = authHostUrl.replace(/^https?:\/\//, '');
+        const metamaskClassicLink = `dapp://${cleanAuthUrl}`;
+
+        try {
+            // Import the newly installed AppLauncher
+            const { AppLauncher } = await import('@capacitor/app-launcher');
+
+            // Raw-fire the intent to Android. This breaks out of the WebView completely and goes straight to PackageManager.
+            // If MetaMask is installed, it opens. If not, this throws an error.
+            await AppLauncher.openUrl({ url: metamaskClassicLink });
+        } catch (e) {
+            console.warn("App launcher failed (MetaMask likely not installed), failing over to website...", e);
+            try {
+                // Fallback to the web link so they can be routed to the Play Store
+                await Browser.open({ url: metamaskUniversalLink, windowName: '_system' });
+            } catch (err) {
+                console.error("All deep links failed", err);
+            }
+        }
         return null; // result comes back via onWalletAuth deep-link listener
     }
 

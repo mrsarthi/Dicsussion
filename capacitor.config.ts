@@ -7,6 +7,12 @@ const config: CapacitorConfig = {
     server: {
         // Use the bundled web assets (don't connect to a live dev server)
         androidScheme: 'https',
+        // Allow the app to open intent:// and external deep links
+        allowNavigation: [
+            "metamask.app.link",
+            "decentrachat-singnalling.onrender.com",
+            "intent://*"
+        ]
     },
     plugins: {
         // Keep the status bar overlay so the app feels full-screen

@@ -85,12 +85,12 @@ export function WalletConnect({ username }) {
                         {isConnecting ? (
                             <>
                                 <span className="spinner"></span>
-                                {isElectron ? 'Waiting for browser...' : 'Connecting...'}
+                                {isElectron ? 'Waiting for MetaMask...' : 'Connecting...'}
                             </>
                         ) : (
                             <>
                                 <span>🦊</span>
-                                {isElectron ? 'Open Browser to Connect' : 'Connect with MetaMask'}
+                                {isElectron ? 'Open MetaMask to Connect' : 'Connect with MetaMask'}
                             </>
                         )}
                     </button>
