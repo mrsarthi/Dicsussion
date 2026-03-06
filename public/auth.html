@@ -204,9 +204,20 @@
                 const platform = urlParams.get('platform');
                 if (platform === 'capacitor') {
                     showStatus('✅ Complete! Returning to DecentraChat...', 'success');
-                    connectBtn.innerHTML = '✅ Connected';
-                    // Redirect back to the native app using our custom scheme
-                    window.location.href = `decentrachat://auth?address=${address}&signature=${signature}`;
+
+                    // Robust Intent URL to force Android to route to our specific app package
+                    const returnIntent = `intent://auth?address=${address}&signature=${signature}#Intent;scheme=decentrachat;package=com.decentrachat.app;end`;
+
+                    // Add a highly visible explicit return button because MetaMask's browser 
+                    // blocks automatic window.location redirects for security reasons
+                    connectBtn.innerHTML = 'Return to DecentraChat';
+                    connectBtn.onclick = () => {
+                        window.location.href = returnIntent;
+                    };
+                    connectBtn.disabled = false;
+
+                    // Also try the automatic redirect just in case it succeeds
+                    window.location.href = returnIntent;
                     return;
                 }
 
