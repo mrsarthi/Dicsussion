@@ -28,6 +28,17 @@ const usernames = new Map(); // username -> address (for lookup)
 const offlineMessages = new Map(); // address -> [messages]
 const messageHistory = new Map(); // conversationId -> [messages]
 const peerConnections = new Map(); // peerId -> { from, to }
+const authResults = new Map(); // sessionId -> { address, signature, timestamp }
+
+// Cleanup expired auth results periodically (every hour)
+setInterval(() => {
+    const now = Date.now();
+    for (const [sid, result] of authResults.entries()) {
+        if (now - result.timestamp > 1000 * 60 * 10) { // 10 minute expiry
+            authResults.delete(sid);
+        }
+    }
+}, 1000 * 60 * 60);
 
 // Helper: Get conversation ID (consistent ordering)
 function getConversationId(addr1, addr2) {
@@ -69,12 +80,14 @@ app.post('/api/auth/callback', (req, res) => {
     }
     console.log(`[🔐] Received Auth Callback for session: ${sessionId}`);
 
-    // Broadcast the signature to specifically the room that requested it!
+    // Buffer the result so it survives app re-connections
+    authResults.set(sessionId, { address, signature, timestamp: Date.now() });
+
+    // Also broadcast to any currently active listeners
     io.to(`auth_${sessionId}`).emit('wallet_auth_result', { address, signature });
 
-    // Debug: Check if anyone is actually in the room
     const clients = io.sockets.adapter.rooms.get(`auth_${sessionId}`);
-    console.log(`[📡] Relayed to session ${sessionId}. Clients in room: ${clients ? clients.size : 0}`);
+    console.log(`[📡] Relayed to session ${sessionId}. Clients currently in room: ${clients ? clients.size : 0}`);
 
     res.json({ success: true });
 });
@@ -85,7 +98,18 @@ io.on('connection', (socket) => {
     // For off-band wallet auth relay
     socket.on('join_auth_room', ({ sessionId }) => {
         socket.join(`auth_${sessionId}`);
-        console.log(`[+] Socket ${socket.id} listening for auth session: ${sessionId}`);
+        console.log(`[+] Socket ${socket.id} joining auth room: ${sessionId}`);
+
+        // If we already have a buffered result, deliver it immediately!
+        const bufferedResult = authResults.get(sessionId);
+        if (bufferedResult) {
+            console.log(`[✅] Delivering buffered auth result for session: ${sessionId}`);
+            socket.emit('wallet_auth_result', {
+                address: bufferedResult.address,
+                signature: bufferedResult.signature
+            });
+            // Optional: delete after delivery, but keeping it for 10 mins is safer if multiple retries happen
+        }
     });
 
     socket.on('leave_auth_room', ({ sessionId }) => {
