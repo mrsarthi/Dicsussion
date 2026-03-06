@@ -205,19 +205,21 @@
                 if (platform === 'capacitor') {
                     showStatus('✅ Complete! Returning to DecentraChat...', 'success');
 
-                    // Robust Intent URL to force Android to route to our specific app package
-                    const returnIntent = `intent://auth?address=${address}&signature=${signature}#Intent;scheme=decentrachat;package=com.decentrachat.app;end`;
+                    // Standard deep link URI - works widely when clicked via an anchor tag
+                    const returnUrl = `decentrachat://auth?address=${address}&signature=${signature}`;
 
-                    // Add a highly visible explicit return button because MetaMask's browser 
-                    // blocks automatic window.location redirects for security reasons
-                    connectBtn.innerHTML = 'Return to DecentraChat';
-                    connectBtn.onclick = () => {
-                        window.location.href = returnIntent;
-                    };
-                    connectBtn.disabled = false;
+                    // Replace the button with a physical HTML <a> tag. 
+                    // In-app browsers often sandbox JavaScript redirects (window.location),
+                    // but they universally respect physical link clicks.
+                    const linkEl = document.createElement('a');
+                    linkEl.href = returnUrl;
+                    linkEl.className = 'btn btn-primary';
+                    linkEl.innerHTML = 'Return to DecentraChat';
+                    linkEl.style.textDecoration = 'none';
+                    connectBtn.replaceWith(linkEl);
 
-                    // Also try the automatic redirect just in case it succeeds
-                    window.location.href = returnIntent;
+                    // Still try a silent automatic native redirect in the background
+                    window.location.href = returnUrl;
                     return;
                 }
 
