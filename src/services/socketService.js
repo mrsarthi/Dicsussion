@@ -346,6 +346,29 @@ export function getHistory(peerAddress) {
 }
 
 /**
+ * Listen for off-band authentication (Mobile WebSocket Relay)
+ * @param {string} sessionId
+ * @returns {Promise<{address, signature}>}
+ */
+export function listenForAuth(sessionId) {
+    if (!socket?.connected) initSocket();
+
+    return new Promise((resolve) => {
+        const handler = (data) => {
+            console.log('✅ Received Auth Result via WebSocket Relay!');
+            socket.off('wallet_auth_result', handler);
+            socket.emit('leave_auth_room', { sessionId });
+            resolve(data);
+        };
+        socket.on('wallet_auth_result', handler);
+
+        // Join the specific room for this auth session
+        socket.emit('join_auth_room', { sessionId });
+        console.log(`🔌 Listening for Auth Relay in room: auth_${sessionId}`);
+    });
+}
+
+/**
  * Disconnect from server
  */
 export function disconnect() {

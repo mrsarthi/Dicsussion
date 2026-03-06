@@ -200,10 +200,42 @@
 
                 showStatus('Sending to app...', 'info');
 
-                // Check if we originated from the Capacitor app
+                // Get session for WebSocket relay
+                const sessionId = urlParams.get('session');
+
+                // If we have a sessionId, use the WebSocket relay (robust mobile flow)
+                if (sessionId) {
+                    showStatus('✅ Signature complete! Relaying to app...', 'success');
+
+                    const relayResponse = await fetch('/api/auth/callback', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            sessionId,
+                            address,
+                            signature
+                        })
+                    });
+
+                    if (relayResponse.ok) {
+                        showStatus('✅ Login Successful! You can now switch back to DecentraChat.', 'success');
+                        connectBtn.innerHTML = '✅ Signed';
+                        connectBtn.disabled = true;
+
+                        // Add a simple button as a fallback for manually switching back
+                        const returnBtn = document.createElement('div');
+                        returnBtn.innerHTML = '<p style="margin-top: 20px; color: #a0a0b0;">You may now minimize this and return to the app.</p>';
+                        connectBtn.after(returnBtn);
+                    } else {
+                        throw new Error('Relay server rejected authentication');
+                    }
+                    return;
+                }
+
+                // Check if we originated from the Capacitor app (Legacy Intent Fallback)
                 const platform = urlParams.get('platform');
                 if (platform === 'capacitor') {
-                    showStatus('✅ Complete! Returning to DecentraChat...', 'success');
+                    showStatus('✅ Complete! Tap the button below to return to the app.', 'success');
 
                     // Standard deep link URI - works widely when clicked via an anchor tag
                     const returnUrl = `decentrachat://auth?address=${address}&signature=${signature}`;

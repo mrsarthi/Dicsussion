@@ -25,6 +25,8 @@ export const platform = {
 
 // ─── Wallet / Auth ─────────────────────────────────────────────
 
+let _walletAuthCallback = null;
+
 /**
  * Open the system browser for MetaMask wallet authentication.
  *  - Electron  → uses IPC to open default browser + local auth server
@@ -38,11 +40,15 @@ export async function openAuthBrowser() {
 
     if (_isCapacitor) {
         const { Browser } = await import('@capacitor/browser');
+        const { listenForAuth } = await import('./socketService');
 
         // To use MetaMask on mobile, the DApp URL must be publicly accessible.
         // We use the signaling server since we just configured it to host auth.html.
         const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'https://decentrachat-singnalling.onrender.com';
-        let authHostUrl = SERVER_URL + '/auth.html?nonce=' + Date.now() + '&platform=capacitor';
+
+        // Generate a random session ID for the WebSocket relay
+        const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        const authHostUrl = SERVER_URL + '/auth.html?nonce=' + Date.now() + '&platform=capacitor&session=' + sessionId;
 
         // MetaMask requires the full URL to be properly encoded for its dapp deep links
         const encodedUrl = encodeURIComponent(authHostUrl);
@@ -54,6 +60,9 @@ export async function openAuthBrowser() {
         // dapp:// requires the protocol stripped
         const cleanAuthUrl = authHostUrl.replace(/^https?:\/\//, '');
         const metamaskClassicLink = `dapp://${cleanAuthUrl}`;
+
+        // Pre-listen to the socket room BEFORE launching the browser
+        const authPromise = listenForAuth(sessionId);
 
         try {
             // Import the newly installed AppLauncher
@@ -71,7 +80,16 @@ export async function openAuthBrowser() {
                 console.error("All deep links failed", err);
             }
         }
-        return null; // result comes back via onWalletAuth deep-link listener
+
+        // Wait for the websocket to deliver the signature!
+        try {
+            const result = await authPromise;
+            if (_walletAuthCallback) {
+                _walletAuthCallback({ address: result.address, signature: result.signature });
+            }
+        } catch (e) { console.error("WebSocket auth error", e); }
+
+        return null; // result comes back via _walletAuthCallback deep-link listener
     }
 
     return null; // browser — no separate auth needed
@@ -90,14 +108,15 @@ export function onWalletAuth(callback) {
     }
 
     if (_isCapacitor) {
+        _walletAuthCallback = callback; // save callback for the WebSocket relay
         import('@capacitor/app').then(({ App }) => {
             App.addListener('appUrlOpen', (event) => {
                 try {
                     const url = new URL(event.url);
                     const address = url.searchParams.get('address');
                     const signature = url.searchParams.get('signature');
-                    if (address && signature) {
-                        callback({ address, signature });
+                    if (address && signature && _walletAuthCallback) {
+                        _walletAuthCallback({ address, signature });
                     }
                 } catch (e) {
                     console.error('Failed to parse auth deep link:', e);

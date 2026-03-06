@@ -9,6 +9,7 @@ const path = require('path');
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 // Serve static Auth Page for Mobile Deep Linking
 app.use(express.static(path.join(__dirname, 'public')));
@@ -60,10 +61,31 @@ app.get('/', (req, res) => {
     });
 });
 
+// Authentication Callback from Web (used for Mobile Deep-link bypass)
+app.post('/api/auth/callback', (req, res) => {
+    const { sessionId, address, signature } = req.body;
+    if (!sessionId || !address || !signature) {
+        return res.status(400).json({ error: 'Missing parameters' });
+    }
+    console.log(`[🔐] Received Auth Callback for session: ${sessionId}`);
+
+    // Broadcast the signature to specifically the room that requested it!
+    io.to(`auth_${sessionId}`).emit('wallet_auth_result', { address, signature });
+    res.json({ success: true });
+});
+
 io.on('connection', (socket) => {
     console.log(`[+] Client connected: ${socket.id}`);
 
-    // User registration with wallet address
+    // For off-band wallet auth relay
+    socket.on('join_auth_room', ({ sessionId }) => {
+        socket.join(`auth_${sessionId}`);
+        console.log(`[+] Socket ${socket.id} listening for auth session: ${sessionId}`);
+    });
+
+    socket.on('leave_auth_room', ({ sessionId }) => {
+        socket.leave(`auth_${sessionId}`);
+    });
     socket.on('register', ({ address, publicKey, username }) => {
         const normalizedAddress = address.toLowerCase();
 
