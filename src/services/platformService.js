@@ -97,6 +97,66 @@ export async function openAuthBrowser() {
     return null; // browser — no separate auth needed
 }
 
+// Ensure valid platform detection logic is registered
+const platformDetails = {}; // Placeholder for platform-specific details
+platformDetails.init = () => {
+    // Determine the environment once, usually on imported load
+    const capInfo = window.Capacitor;
+}
+
+/**
+ * Returns the currently running version.
+ * - Electron: package.json (via Vite __APP_VERSION__)
+ * - Capacitor: Checks Capgo's active bundle version first, falls back to native build.gradle
+ * - Browser: package.json
+ */
+export async function getCurrentAppVersion() {
+    if (_currentResolvedVersion) return _currentResolvedVersion;
+
+    let baseVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
+
+    if (_isCapacitor) {
+        // Android natively reads from build.gradle via Vite injection
+        baseVersion = typeof __ANDROID_VERSION__ !== 'undefined' ? __ANDROID_VERSION__ : '0.0.0';
+
+        try {
+            const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
+            const currentBundle = await CapacitorUpdater.current();
+            // If Capgo has installed a downloaded bundle, prioritize its version!
+            if (currentBundle && currentBundle.bundle && currentBundle.bundle.version && currentBundle.bundle.version !== 'builtin') {
+                // Remove 'v' prefix if it exists from Github Tags to standardize comparisons
+                baseVersion = currentBundle.bundle.version.replace(/^v/, '');
+            }
+        } catch (err) {
+            console.warn('Failed to fetch Capgo current version:', err);
+        }
+    }
+
+    _currentResolvedVersion = baseVersion;
+    return baseVersion;
+}
+
+export function setupUpdateListeners(handlers) {
+    if (_isElectron) {
+        window.electronAPI.onUpdateAvailable(handlers.onAvailable);
+        window.electronAPI.onUpdateProgress(handlers.onProgress);
+        window.electronAPI.onUpdateDownloaded(handlers.onDownloaded);
+        window.electronAPI.onUpdateError(handlers.onError);
+        window.electronAPI.onUpdateNotAvailable(handlers.onNotAvailable);
+        return;
+    }
+
+    if (_isCapacitor) {
+        // For Capacitor, we use the internal _capEmit mechanism
+        _capUpdateCallbacks.onAvailable.push(handlers.onAvailable);
+        _capUpdateCallbacks.onProgress.push(handlers.onProgress);
+        _capUpdateCallbacks.onDownloaded.push(handlers.onDownloaded);
+        _capUpdateCallbacks.onError.push(handlers.onError);
+        _capUpdateCallbacks.onNotAvailable.push(handlers.onNotAvailable);
+        return;
+    }
+}
+
 /**
  * Listen for wallet auth data coming back after the browser auth flow.
  *  - Electron  → IPC event from the local auth server
@@ -280,9 +340,19 @@ function _isNewerVersion(remote, local) {
     return false;
 }
 
-// Store the latest ZIP URL for Capgo download
+//let _platformType = 'browser';
 let _latestZipUrl = null;
 let _latestUpdateVersion = null;
+let _currentResolvedVersion = null;
+
+// The Electron bridge provides methods if we're in desktop
+// if (window.electronAPI) {
+//     _isElectron = true;
+//     _platformType = 'electron';
+// } else if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+//     _isCapacitor = true;
+//     _platformType = 'capacitor';
+// }
 
 /**
  * Check for updates.
@@ -303,8 +373,10 @@ export async function checkForUpdates() {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
 
-            const currentVersion =
-                typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
+            const currentVersion = await getCurrentAppVersion();
+
+            console.log(`[CapUpdater] Github Latest Release: ${data.tag_name}`);
+            console.log(`[CapUpdater] Current Native/Web Version: ${currentVersion}`);
 
             if (_isNewerVersion(data.tag_name, currentVersion)) {
                 // Find dist.zip asset attached to the GitHub release
@@ -344,7 +416,9 @@ export async function downloadUpdate() {
 
             _capEmit('onProgress', { percent: 10 });
 
-            CapacitorUpdater.addListener('download', (info) => {
+            console.log(`[CapUpdater] Starting download for ${_latestUpdateVersion}`);
+
+            const downloadListener = await CapacitorUpdater.addListener('download', (info) => {
                 _capEmit('onProgress', { percent: info.percent });
             });
 
@@ -352,6 +426,12 @@ export async function downloadUpdate() {
                 url: _latestZipUrl,
                 version: _latestUpdateVersion,
             });
+
+            console.log(`[CapUpdater] Download complete! Unpacking finished.`);
+
+            if (downloadListener) {
+                downloadListener.remove();
+            }
 
             _capEmit('onDownloaded', {});
         } catch (err) {

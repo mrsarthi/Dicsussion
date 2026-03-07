@@ -11,6 +11,7 @@ import {
     checkForUpdates,
     downloadUpdate,
     installUpdate,
+    getCurrentAppVersion,
 } from '../services/platformService';
 
 const FONT_SIZES = [
@@ -32,6 +33,11 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
     const [updateVersion, setUpdateVersion] = useState('');
     const [updateProgress, setUpdateProgress] = useState(0);
     const [updateError, setUpdateError] = useState('');
+    const [displayVersion, setDisplayVersion] = useState('...');
+
+    useEffect(() => {
+        getCurrentAppVersion().then(v => setDisplayVersion(v));
+    }, []);
 
     useEffect(() => {
         document.documentElement.style.fontSize = `${fontSize}px`;
@@ -52,7 +58,7 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
         });
 
         const removeProgress = onUpdateProgress((progressObj) => {
-            setUpdateStatus('downloading');
+            setUpdateStatus(prev => (prev === 'error' || prev === 'ready') ? prev : 'downloading');
             setUpdateProgress(progressObj.percent);
         });
 
@@ -154,7 +160,7 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
 
                         {updateStatus === 'idle' && (
                             <div className="settings-row">
-                                <p className="settings-description" style={{ margin: 0 }}>Current version: v{__APP_VERSION__}</p>
+                                <p className="settings-description" style={{ margin: 0 }}>Current version: v{displayVersion}</p>
                                 <button className="btn btn-secondary settings-action-btn" onClick={handleCheckUpdate}>
                                     Check for Updates
                                 </button>
@@ -171,7 +177,7 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
                         {updateStatus === 'no-update' && (
                             <div className="update-inline-status success">
                                 <span>✅</span>
-                                <span>You're on the latest version (v{__APP_VERSION__})</span>
+                                <span>You're on the latest version (v{displayVersion})</span>
                             </div>
                         )}
 
@@ -241,7 +247,7 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
                 </div>
 
                 <div className="settings-footer">
-                    <span className="text-muted text-xs">DecentraChat v{__APP_VERSION__}</span>
+                    <span className="text-muted text-xs">DecentraChat v{displayVersion}</span>
                 </div>
             </div>
         </div>

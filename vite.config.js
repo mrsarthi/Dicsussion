@@ -2,13 +2,30 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { resolve } from 'path'
+import fs from 'fs'
 
 import packageJson from './package.json'
+
+// Parse Android version from build.gradle
+let androidVersion = '1.0.0';
+try {
+  const gradlePath = resolve(__dirname, 'android/app/build.gradle');
+  if (fs.existsSync(gradlePath)) {
+    const gradleContent = fs.readFileSync(gradlePath, 'utf8');
+    const versionMatch = gradleContent.match(/versionName\s+"([^"]+)"/);
+    if (versionMatch && versionMatch[1]) {
+      androidVersion = versionMatch[1];
+    }
+  }
+} catch (error) {
+  console.warn('Could not parse Android version from build.gradle', error);
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   define: {
     '__APP_VERSION__': JSON.stringify(packageJson.version),
+    '__ANDROID_VERSION__': JSON.stringify(androidVersion),
   },
   plugins: [
     react(),

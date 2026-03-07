@@ -115,25 +115,33 @@ html {
   font-size: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+  width: 100%;
 }
 
 body {
   font-family: var(--font-sans);
   background: var(--bg-primary);
   color: var(--text-primary);
-  height: 100vh;
+  height: 100%;
+  width: 100%;
   overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
   line-height: 1.6;
 }
 
 #root {
-  min-height: 100vh;
+  height: 100%;
+  width: 100%;
 }
 
 .app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
+  width: 100%;
   overflow: hidden;
   background: var(--bg-primary);
 }

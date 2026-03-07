@@ -7,6 +7,7 @@ import { GroupDetailsModal } from './GroupDetailsModal';
 import { SettingsModal } from './SettingsModal';
 import { App as CapacitorApp } from '@capacitor/app';
 import { platform } from '../services/platformService';
+import QuickPinchZoom, { make3dTransformValue } from 'react-quick-pinch-zoom';
 import './ChatInterface.css';
 
 export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
@@ -184,6 +185,15 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
 
     const cancelImagePreview = () => {
         setImagePreview(null);
+    };
+
+    const scrollToMessage = (msgId) => {
+        const el = document.getElementById(`msg-${msgId}`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('highlight-reply');
+            setTimeout(() => el.classList.remove('highlight-reply'), 1500);
+        }
     };
 
     const handleSearch = async (e) => {
@@ -469,6 +479,7 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                 messages.map((msg, index) => (
                                     <div
                                         key={msg.id || index}
+                                        id={msg.id ? `msg-${msg.id}` : undefined}
                                         className={`message animate-fadeIn ${msg.from?.toLowerCase() === walletAddress?.toLowerCase()
                                             ? 'sent'
                                             : 'received'
@@ -486,13 +497,18 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                             )}
 
                                             {msg.replyTo && (
-                                                <div className="message-reply-context">
+                                                <div
+                                                    className="message-reply-context clickable"
+                                                    onClick={() => msg.replyTo.id && scrollToMessage(msg.replyTo.id)}
+                                                    role="button"
+                                                >
                                                     <div className="reply-bar-line"></div>
                                                     <div className="reply-content">
                                                         <span className="reply-sender">
                                                             {msg.replyTo.senderUsername || 'User'}
                                                         </span>
                                                         <span className="reply-text">
+                                                            {msg.replyTo.content?.length > 100 ? msg.replyTo.content.substring(0, 100) + '...' : msg.replyTo.content}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -579,7 +595,7 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                     placeholder={activeChat.isGroup ? `Message ${activeChat.info?.username || 'group'}...` : "Type a message..."}
                                     value={newMessage}
                                     onChange={handleInput}
-                                    autoFocus
+                                    autoFocus={!platform.isCapacitor}
                                 />
                                 {imagePreview ? (
                                     <button
@@ -617,8 +633,29 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
             {/* Lightbox */}
             {lightboxImage && (
                 <div className="lightbox-overlay" onClick={() => setLightboxImage(null)}>
-                    <button className="lightbox-close" onClick={() => setLightboxImage(null)}>×</button>
-                    <img src={lightboxImage} alt="Full size" className="lightbox-image" onClick={(e) => e.stopPropagation()} />
+                    <button className="lightbox-close" onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}>×</button>
+                    <div className="lightbox-zoom-container" onClick={(e) => e.stopPropagation()}>
+                        <QuickPinchZoom
+                            onUpdate={({ x, y, scale }) => {
+                                const imgEntry = document.getElementById('lightbox-zoomed-img');
+                                if (imgEntry) {
+                                    imgEntry.style.setProperty(
+                                        'transform',
+                                        make3dTransformValue({ x, y, scale })
+                                    );
+                                }
+                            }}
+                            maxZoom={5}
+                            wheelScaleFactor={500}
+                        >
+                            <img
+                                id="lightbox-zoomed-img"
+                                src={lightboxImage}
+                                alt="Full size"
+                                className="lightbox-image"
+                            />
+                        </QuickPinchZoom>
+                    </div>
                 </div>
             )}
 
