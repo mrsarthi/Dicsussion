@@ -19,11 +19,72 @@
     border-top: none;
     border-bottom: none;
     border-left: none;
+    transition: transform var(--transition-normal);
+}
+
+/* WhatsApp Mobile Sidebar Overrides */
+.platform-capacitor .sidebar,
+.platform-android .sidebar {
+    width: 100%;
+    max-width: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 10;
+    background: var(--bg-primary);
+}
+
+.platform-capacitor .chat-container.has-active-chat .sidebar,
+.platform-android .chat-container.has-active-chat .sidebar {
+    transform: translateX(-100%);
+    pointer-events: none;
+}
+
+.platform-capacitor .chat-container:not(.has-active-chat) .sidebar,
+.platform-android .chat-container:not(.has-active-chat) .sidebar {
+    transform: translateX(0);
 }
 
 .sidebar-header {
     padding: var(--space-lg);
     border-bottom: 1px solid var(--border-subtle);
+}
+
+.platform-capacitor .sidebar-header,
+.platform-android .sidebar-header {
+    padding-top: calc(var(--space-lg) + env(safe-area-inset-top, 24px));
+}
+
+.sidebar-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.user-profile-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.user-profile-badge:hover {
+    background: var(--bg-glass);
+}
+
+.user-profile-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-profile-name {
+    font-size: 0.85rem;
+    font-weight: 600;
 }
 
 .sidebar-header h2 {
@@ -115,6 +176,30 @@
     flex-direction: column;
     position: relative;
     min-width: 0;
+}
+
+/* WhatsApp Mobile Main Overrides */
+.platform-capacitor .chat-main,
+.platform-android .chat-main {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 20;
+    background: #0b141a;
+    /* WhatsApp Background */
+}
+
+/* Show/Hide main area based on active chat */
+.platform-capacitor .chat-container.has-active-chat .chat-main,
+.platform-android .chat-container.has-active-chat .chat-main {
+    display: flex;
+}
+
+.platform-capacitor .chat-container:not(.has-active-chat) .chat-main,
+.platform-android .chat-container:not(.has-active-chat) .chat-main {
+    display: none;
 }
 
 /* No Chat Selected */
@@ -263,6 +348,23 @@
     background: var(--bg-glass);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border-subtle);
+}
+
+.platform-capacitor .chat-header,
+.platform-android .chat-header {
+    background: #202c33;
+    /* WhatsApp Header */
+    padding: calc(0.5rem + env(safe-area-inset-top, 24px)) 0.75rem 0.5rem 0.75rem;
+    height: auto;
+    min-height: calc(60px + env(safe-area-inset-top, 24px));
+    border-bottom: none;
+}
+
+.platform-capacitor .back-btn,
+.platform-android .back-btn {
+    display: flex;
+    margin-right: -10px;
+    color: var(--text-primary);
 }
 
 .back-btn {
@@ -414,6 +516,19 @@
 .message.received .message-bubble {
     background: var(--bg-tertiary);
     border-bottom-left-radius: var(--space-xs);
+}
+
+/* WhatsApp Bubble Overrides */
+.platform-capacitor .message.sent .message-bubble,
+.platform-android .message.sent .message-bubble {
+    background: #005c4b;
+    border-radius: 10px 0px 10px 10px;
+}
+
+.platform-capacitor .message.received .message-bubble,
+.platform-android .message.received .message-bubble {
+    background: #202c33;
+    border-radius: 0px 10px 10px 10px;
 }
 
 .message.failed .message-bubble {
@@ -571,7 +686,65 @@
     margin-left: var(--space-sm);
 }
 
-/* Responsive */
+/* Responsive / Mobile WhatsApp Style */
+.platform-capacitor .contact-item,
+.platform-android .contact-item {
+    padding: 0.75rem 1rem;
+    border-radius: 0;
+    border-bottom: 1px solid #222d34;
+}
+
+.platform-capacitor .contact-item:hover,
+.platform-android .contact-item:hover {
+    background: #202c33;
+}
+
+.platform-capacitor .contact-item.active,
+.platform-android .contact-item.active {
+    background: #2a3942;
+    border-left: 4px solid var(--accent-primary);
+}
+
+.platform-capacitor .avatar,
+.platform-android .avatar {
+    width: 48px;
+    height: 48px;
+    background: #6a7175;
+    font-size: 1.2rem;
+}
+
+.platform-capacitor .message-input-form,
+.platform-android .message-input-form {
+    background: #202c33;
+    padding: 10px;
+    border-top: none;
+}
+
+.platform-capacitor .message-input-row,
+.platform-android .message-input-row {
+    background: #2a3942;
+    border-radius: 24px;
+    padding-left: 10px;
+}
+
+.platform-capacitor .message-input,
+.platform-android .message-input {
+    background: transparent;
+    border: none;
+    box-shadow: none !important;
+}
+
+.platform-capacitor .send-btn,
+.platform-android .send-btn {
+    border-radius: 50%;
+    width: 45px;
+    height: 45px;
+    min-width: 45px;
+    padding: 0;
+    background: var(--accent-primary);
+    box-shadow: none;
+}
+
 @media (max-width: 768px) {
     .sidebar {
         position: absolute;

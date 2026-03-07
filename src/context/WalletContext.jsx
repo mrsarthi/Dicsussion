@@ -90,6 +90,9 @@ export function WalletProvider({ children }) {
 
     const handleElectronAuth = async (data) => {
         try {
+            setError(null);
+            setIsConnecting(true);
+
             // Derive keys from the signature
             const encryptionKeys = await storeKeysFromSignature(data.address, data.signature);
             setKeys(encryptionKeys);
@@ -100,6 +103,7 @@ export function WalletProvider({ children }) {
 
             setIsConnected(true);
             setIsConnecting(false);
+            console.log('✅ Mobile Auth successful:', data.address);
         } catch (err) {
             setError(err.message);
             setIsConnecting(false);

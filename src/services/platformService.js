@@ -170,12 +170,10 @@ export async function appExit() {
 
 // ─── Update System ─────────────────────────────────────────────
 // Electron:   uses electron-updater IPC
-// Capacitor:  self-hosted version.json + APK download
+// Capacitor:  OTA web bundle downloads via Capgo CapacitorUpdater
 // Browser:    no updates
 
-// The URL your website serves version info from.
-// Example response: { "version": "1.7.0", "apkUrl": "https://yoursite.com/downloads/DecentraChat-1.7.0.apk" }
-const VERSION_CHECK_URL = 'https://yoursite.com/api/version.json';
+const GITHUB_API_LATEST_RELEASE = 'https://api.github.com/repos/mrsarthi/Dicsussion/releases/latest';
 
 // ── Internal state for Capacitor updater ──
 let _capUpdateCallbacks = {
@@ -282,8 +280,9 @@ function _isNewerVersion(remote, local) {
     return false;
 }
 
-// Store the latest APK URL for download
-let _latestApkUrl = null;
+// Store the latest ZIP URL for Capgo download
+let _latestZipUrl = null;
+let _latestUpdateVersion = null;
 
 /**
  * Check for updates.
@@ -296,16 +295,28 @@ export async function checkForUpdates() {
 
     if (_isCapacitor) {
         try {
-            const res = await fetch(VERSION_CHECK_URL, { cache: 'no-store' });
+            const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
+            // Notify OS that the app successfully booted, preventing rollback
+            await CapacitorUpdater.notifyAppReady();
+
+            const res = await fetch(GITHUB_API_LATEST_RELEASE, { cache: 'no-store' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
 
             const currentVersion =
                 typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
 
-            if (_isNewerVersion(data.version, currentVersion)) {
-                _latestApkUrl = data.apkUrl;
-                _capEmit('onAvailable', { version: data.version });
+            if (_isNewerVersion(data.tag_name, currentVersion)) {
+                // Find dist.zip asset attached to the GitHub release
+                const zipAsset = data.assets.find(a => a.name === 'dist.zip' || a.name.endsWith('.zip'));
+                if (zipAsset) {
+                    _latestZipUrl = zipAsset.browser_download_url;
+                    _latestUpdateVersion = data.tag_name;
+                    _capEmit('onAvailable', { version: data.tag_name });
+                } else {
+                    console.log('New release found, but no .zip asset attached for OTA.');
+                    _capEmit('onNotAvailable', {});
+                }
             } else {
                 _capEmit('onNotAvailable', {});
             }
@@ -319,7 +330,7 @@ export async function checkForUpdates() {
 /**
  * Download the update.
  *  - Electron → IPC to electron-updater
- *  - Capacitor → open the APK URL in the system browser for download
+ *  - Capacitor → Capgo downloads dist.zip in background
  */
 export async function downloadUpdate() {
     if (_isElectron && window.electronAPI?.downloadUpdate) {
@@ -327,13 +338,21 @@ export async function downloadUpdate() {
         return;
     }
 
-    if (_isCapacitor && _latestApkUrl) {
+    if (_isCapacitor && _latestZipUrl && _latestUpdateVersion) {
         try {
-            // Open the APK URL in the system browser — Android will handle the download
-            const { Browser } = await import('@capacitor/browser');
-            _capEmit('onProgress', { percent: 50 }); // Indeterminate-ish
-            await Browser.open({ url: _latestApkUrl });
-            // The user will install from the browser download
+            const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
+
+            _capEmit('onProgress', { percent: 10 });
+
+            CapacitorUpdater.addListener('download', (info) => {
+                _capEmit('onProgress', { percent: info.percent });
+            });
+
+            await CapacitorUpdater.download({
+                url: _latestZipUrl,
+                version: _latestUpdateVersion,
+            });
+
             _capEmit('onDownloaded', {});
         } catch (err) {
             _capEmit('onError', err.message || 'Download failed');
@@ -345,14 +364,20 @@ export async function downloadUpdate() {
 /**
  * Install the update.
  *  - Electron → quit and install
- *  - Capacitor → no-op (user installs APK from downloads)
+ *  - Capacitor → Apply OTA bundle and restart app instantly
  */
 export function installUpdate() {
     if (_isElectron && window.electronAPI?.installUpdate) {
         window.electronAPI.installUpdate();
         return;
     }
-    // Capacitor: The APK was opened in browser — user installs manually
+
+    if (_isCapacitor && _latestUpdateVersion) {
+        import('@capgo/capacitor-updater').then(({ CapacitorUpdater }) => {
+            CapacitorUpdater.set({ id: _latestUpdateVersion });
+        });
+        return;
+    }
 }
 
 /**

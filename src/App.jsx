@@ -8,12 +8,46 @@ import { initSocket, register, disconnect } from './services/socketService';
 import { getStoredKeys, clearKeys } from './crypto/keyManager';
 import { clearAllData } from './services/storageService';
 import { UpdateManager } from './components/UpdateManager';
+import { platform } from './services/platformService';
+import React, { Component } from 'react';
 import './styles/index.css';
 
 // Apply persisted font size on load
 const savedFontSize = localStorage.getItem('decentrachat_font_size');
 if (savedFontSize) {
   document.documentElement.style.fontSize = `${savedFontSize}px`;
+}
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ error, errorInfo });
+    console.error("UI CRAHSED:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '20px', color: 'white', background: '#e11d48', height: '100vh', overflowY: 'auto' }}>
+          <h2>App Crashed!</h2>
+          <p>{this.state.error && this.state.error.toString()}</p>
+          <pre style={{ fontSize: '10px', marginTop: '10px', color: '#ffcccb' }}>
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px', background: 'white', color: 'black' }}>Reload App</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function AppContent() {
@@ -105,40 +139,49 @@ function AppContent() {
     }
   };
 
-  if (!isConnected) {
-    return <WalletConnect />;
-  }
+  const content = (() => {
+    if (!isConnected) {
+      return <WalletConnect />;
+    }
 
-  // Wait for socket to be ready before showing username setup
-  if (!isSocketReady) {
-    return (
-      <div className="wallet-connect-container">
-        <div className="wallet-card glass-card animate-fadeIn">
-          <div className="spinner" style={{ width: '40px', height: '40px', margin: '0 auto' }}></div>
-          <p style={{ marginTop: '16px', color: 'var(--text-secondary)' }}>Connecting to network...</p>
+    if (!isSocketReady) {
+      return (
+        <div className="wallet-connect-container">
+          <div className="wallet-card glass-card animate-fadeIn">
+            <div className="spinner" style={{ width: '40px', height: '40px', margin: '0 auto' }}></div>
+            <p style={{ marginTop: '16px', color: 'var(--text-secondary)' }}>Connecting to network...</p>
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  if (showUsernameSetup) {
-    return <UsernameSetup onComplete={handleUsernameComplete} onSkip={handleUsernameSkip} />;
-  }
+    if (showUsernameSetup) {
+      return <UsernameSetup onComplete={handleUsernameComplete} onSkip={handleUsernameSkip} />;
+    }
+
+    return (
+      <>
+        <WalletConnect username={username} />
+        <ChatInterface walletAddress={address} username={username} onDeleteAccount={handleDeleteAccount} />
+      </>
+    );
+  })();
 
   return (
-    <div className="app">
-      <WalletConnect username={username} />
-      <ChatInterface walletAddress={address} username={username} onDeleteAccount={handleDeleteAccount} />
+    <div className={`app platform-${platform.type}`}>
+      {content}
     </div>
   );
 }
 
 function App() {
   return (
-    <WalletProvider>
-      <UpdateManager />
-      <AppContent />
-    </WalletProvider>
+    <ErrorBoundary>
+      <WalletProvider>
+        <UpdateManager />
+        <AppContent />
+      </WalletProvider>
+    </ErrorBoundary>
   );
 }
 

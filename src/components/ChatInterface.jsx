@@ -5,9 +5,11 @@ import { formatAddress } from '../blockchain/web3Provider';
 import { CreateGroupModal } from './CreateGroupModal';
 import { GroupDetailsModal } from './GroupDetailsModal';
 import { SettingsModal } from './SettingsModal';
+import { App as CapacitorApp } from '@capacitor/app';
+import { platform } from '../services/platformService';
 import './ChatInterface.css';
 
-export function ChatInterface({ walletAddress, onDeleteAccount }) {
+export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
     const {
         activeChat,
         messages,
@@ -46,6 +48,47 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    // Hardware Back Button logic for Android
+    useEffect(() => {
+        if (!platform.isCapacitor) return;
+
+        const backListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+            // Priority 1: Lightbox open
+            if (lightboxImage) {
+                setLightboxImage(null);
+                return;
+            }
+            // Priority 2: Modals open
+            if (showSettings) {
+                setShowSettings(false);
+                return;
+            }
+            if (showGroupDetails) {
+                setShowGroupDetails(false);
+                return;
+            }
+            if (showGroupModal) {
+                setShowGroupModal(false);
+                return;
+            }
+            // Priority 3: Active Chat open
+            if (activeChat) {
+                closeChat();
+                return;
+            }
+            // Otherwise, let it go back or exit
+            if (canGoBack) {
+                window.history.back();
+            } else {
+                CapacitorApp.exitApp();
+            }
+        });
+
+        return () => {
+            backListener.then(listener => listener.remove());
+        };
+    }, [lightboxImage, showSettings, showGroupDetails, showGroupModal, activeChat, closeChat]);
 
     const handleSend = async (e) => {
         e.preventDefault();
@@ -193,7 +236,7 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
     const typingText = getTypingText();
 
     return (
-        <div className="chat-container">
+        <div className={`chat-container ${activeChat ? 'has-active-chat' : ''}`}>
             {showGroupModal && (
                 <CreateGroupModal
                     contacts={contacts}
@@ -205,10 +248,32 @@ export function ChatInterface({ walletAddress, onDeleteAccount }) {
             {/* Sidebar */}
             <aside className="sidebar glass-card">
                 <div className="sidebar-header">
-                    <h2>Chats</h2>
+                    <div className="sidebar-header-top">
+                        <h2>Chats</h2>
+                        {walletAddress && (
+                            <div className="user-profile-badge" onClick={() => {
+                                try {
+                                    navigator.clipboard.writeText(walletAddress);
+                                    alert('Address copied to clipboard! 📋');
+                                } catch (err) {
+                                    console.error(err);
+                                }
+                            }} title="Copy your address">
+                                <div className="avatar avatar-sm">
+                                    {(username && username.length > 1) ? username.replace('@', '')[0]?.toUpperCase() : (walletAddress ? walletAddress.slice(2, 4).toUpperCase() : 'U')}
+                                </div>
+                                <div className="user-profile-info">
+                                    <span className="user-profile-name">{username || 'Anonymous'}</span>
+                                    <span className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : ''} 📋
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     {!serverConnected && (
-                        <div className="connection-status-banner offline">
-                            ⚠️ Disconnected
+                        <div className="connection-status-banner offline animate-fadeIn" style={{ marginTop: '12px' }}>
+                            ⚠️ Disconnected from signaling server
                         </div>
                     )}
                 </div>

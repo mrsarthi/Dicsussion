@@ -64,6 +64,44 @@
   --transition-slow: 400ms ease;
 }
 
+/* WhatsApp Android Design Overrides */
+.platform-capacitor,
+.platform-android {
+  --bg-primary: #111b21;
+  --bg-secondary: #222e35;
+  --bg-tertiary: #2a3942;
+  --accent-primary: #00a884;
+  --accent-secondary: #005c4b;
+  --accent-gradient: linear-gradient(135deg, #00a884 0%, #008069 100%);
+  --accent-glow: rgba(0, 168, 132, 0.2);
+
+  --text-primary: #e9edef;
+  --text-secondary: #8696a0;
+  --text-muted: #667781;
+
+  --bubble-sent: #005c4b;
+  --bubble-received: #202c33;
+  --wa-teal: #008069;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-lg: 0px;
+  /* Linear headers for WA */
+  --radius-md: 18px;
+  /* Chat bubble default */
+}
+
+/* WhatsApp specific layout resets */
+.platform-capacitor.app,
+.platform-android.app {
+  background: var(--bg-primary);
+}
+
+.platform-capacitor body,
+.platform-android body {
+  /* This will apply if we apply class to body, but let's be safe */
+  background: var(--bg-primary);
+}
+
 /* Reset & Base */
 *,
 *::before,
@@ -97,6 +135,7 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  background: var(--bg-primary);
 }
 
 /* Scrollbar Styling */
