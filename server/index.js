@@ -283,6 +283,49 @@ io.on('connection', (socket) => {
         socket.emit('messageSent', fullMessage);
     });
 
+    // Send group message — fan out to all members, queue for offline ones
+    socket.on('sendGroupMessage', (messageData) => {
+        const { groupId, members, ...rest } = messageData;
+
+        if (!Array.isArray(members) || members.length === 0) return;
+
+        const fullMessage = {
+            ...rest,
+            groupId,
+            from: socket.address,
+            timestamp: Date.now(),
+            id: rest.id || `gmsg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        };
+
+        let deliveredCount = 0;
+        let queuedCount = 0;
+
+        members.forEach(memberAddr => {
+            const toAddress = memberAddr.toLowerCase();
+
+            // Don't echo back to sender
+            if (toAddress === socket.address) return;
+
+            const recipient = users.get(toAddress);
+
+            if (recipient && recipient.online) {
+                io.to(recipient.socketId).emit('groupMessage', fullMessage);
+                deliveredCount++;
+            } else {
+                // Queue for offline delivery — same mechanism as DMs
+                const pending = offlineMessages.get(toAddress) || [];
+                // Tag so the client knows it's a group message on reconnect
+                pending.push({ ...fullMessage, _isGroupMessage: true });
+                offlineMessages.set(toAddress, pending);
+                queuedCount++;
+            }
+        });
+
+        // Acknowledge back to sender
+        socket.emit('messageSent', fullMessage);
+        console.log(`[👥] Group msg ${groupId?.slice(0, 8)}: ${deliveredCount} delivered, ${queuedCount} queued`);
+    });
+
     // Check if user is online
     socket.on('checkOnline', ({ address }, callback) => {
         const user = users.get(address.toLowerCase());

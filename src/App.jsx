@@ -8,7 +8,7 @@ import { initSocket, register, disconnect } from './services/socketService';
 import { getStoredKeys, clearKeys } from './crypto/keyManager';
 import { clearAllData } from './services/storageService';
 import { UpdateManager } from './components/UpdateManager';
-import { platform } from './services/platformService';
+import { platform, notifyUpdateReady } from './services/platformService';
 import React, { Component } from 'react';
 import './styles/index.css';
 
@@ -58,8 +58,13 @@ function AppContent() {
   const [showUsernameSetup, setShowUsernameSetup] = useState(false);
   const [isSocketReady, setIsSocketReady] = useState(false);
 
-  // Initialize socket and register when wallet connects
+  useEffect(() => {
+    // Inform Capacitor Updater that the JS bundle successfully booted!
+    // This MUST happen before Capgo's 10-second rollback timer expires.
+    notifyUpdateReady();
+  }, []);
 
+  // Initialize socket and register when wallet connects
   useEffect(() => {
     if (!isConnected || !address) return;
 

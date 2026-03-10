@@ -118,18 +118,6 @@ export async function getCurrentAppVersion() {
     if (_isCapacitor) {
         // Android natively reads from build.gradle via Vite injection
         baseVersion = typeof __ANDROID_VERSION__ !== 'undefined' ? __ANDROID_VERSION__ : '0.0.0';
-
-        try {
-            const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
-            const currentBundle = await CapacitorUpdater.current();
-            // If Capgo has installed a downloaded bundle, prioritize its version!
-            if (currentBundle && currentBundle.bundle && currentBundle.bundle.version && currentBundle.bundle.version !== 'builtin') {
-                // Remove 'v' prefix if it exists from Github Tags to standardize comparisons
-                baseVersion = currentBundle.bundle.version.replace(/^v/, '');
-            }
-        } catch (err) {
-            console.warn('Failed to fetch Capgo current version:', err);
-        }
     }
 
     _currentResolvedVersion = baseVersion;
@@ -342,8 +330,9 @@ function _isNewerVersion(remote, local) {
 
 //let _platformType = 'browser';
 let _latestZipUrl = null;
-let _latestUpdateVersion = null;
+let _latestUpdateVersion = null; // Will now hold the ISO timestamp
 let _currentResolvedVersion = null;
+let _downloadedBundleId = null;
 
 // The Electron bridge provides methods if we're in desktop
 // if (window.electronAPI) {
@@ -354,8 +343,13 @@ let _currentResolvedVersion = null;
 //     _platformType = 'capacitor';
 // }
 
+// Let the OS handle the app boot naturally.
+export async function notifyUpdateReady() {
+    // No-op for Native APK Strategy
+}
+
 /**
- * Check for updates.
+ * Check for updates using GitHub Asset Timestamps.
  */
 export async function checkForUpdates() {
     if (_isElectron && window.electronAPI?.checkForUpdates) {
@@ -365,30 +359,30 @@ export async function checkForUpdates() {
 
     if (_isCapacitor) {
         try {
-            const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
-            // Notify OS that the app successfully booted, preventing rollback
-            await CapacitorUpdater.notifyAppReady();
-
             const res = await fetch(GITHUB_API_LATEST_RELEASE, { cache: 'no-store' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
 
-            const currentVersion = await getCurrentAppVersion();
+            // Find the .apk asset attached to the GitHub release
+            const apkAsset = data.assets.find(a => a.name.endsWith('.apk'));
 
-            console.log(`[CapUpdater] Github Latest Release: ${data.tag_name}`);
-            console.log(`[CapUpdater] Current Native/Web Version: ${currentVersion}`);
+            if (!apkAsset) {
+                console.log('[NativeUpdater] No .apk asset found on GitHub release.');
+                _capEmit('onNotAvailable', {});
+                return;
+            }
 
-            if (_isNewerVersion(data.tag_name, currentVersion)) {
-                // Find dist.zip asset attached to the GitHub release
-                const zipAsset = data.assets.find(a => a.name === 'dist.zip' || a.name.endsWith('.zip'));
-                if (zipAsset) {
-                    _latestZipUrl = zipAsset.browser_download_url;
-                    _latestUpdateVersion = data.tag_name;
-                    _capEmit('onAvailable', { version: data.tag_name });
-                } else {
-                    console.log('New release found, but no .zip asset attached for OTA.');
-                    _capEmit('onNotAvailable', {});
-                }
+            // Use the GitHub Asset ID as the update key — it changes with every new upload
+            const remoteAssetId = String(apkAsset.id);
+            const localAssetId = localStorage.getItem('last_installed_asset_id') || '';
+
+            console.log(`[NativeUpdater] Remote Asset ID: ${remoteAssetId}`);
+            console.log(`[NativeUpdater] Local Asset ID: ${localAssetId}`);
+
+            if (remoteAssetId !== localAssetId) {
+                _latestZipUrl = apkAsset.browser_download_url;
+                _latestUpdateVersion = remoteAssetId; // Store the Asset ID as the version marker
+                _capEmit('onAvailable', { version: 'Latest Release' });
             } else {
                 _capEmit('onNotAvailable', {});
             }
@@ -400,63 +394,43 @@ export async function checkForUpdates() {
 }
 
 /**
- * Download the update.
- *  - Electron → IPC to electron-updater
- *  - Capacitor → Capgo downloads dist.zip in background
+ * Legacy Download method (Electron).
  */
 export async function downloadUpdate() {
     if (_isElectron && window.electronAPI?.downloadUpdate) {
         window.electronAPI.downloadUpdate();
         return;
     }
-
-    if (_isCapacitor && _latestZipUrl && _latestUpdateVersion) {
-        try {
-            const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
-
-            _capEmit('onProgress', { percent: 10 });
-
-            console.log(`[CapUpdater] Starting download for ${_latestUpdateVersion}`);
-
-            const downloadListener = await CapacitorUpdater.addListener('download', (info) => {
-                _capEmit('onProgress', { percent: info.percent });
-            });
-
-            await CapacitorUpdater.download({
-                url: _latestZipUrl,
-                version: _latestUpdateVersion,
-            });
-
-            console.log(`[CapUpdater] Download complete! Unpacking finished.`);
-
-            if (downloadListener) {
-                downloadListener.remove();
-            }
-
-            _capEmit('onDownloaded', {});
-        } catch (err) {
-            _capEmit('onError', err.message || 'Download failed');
-        }
-        return;
-    }
 }
 
 /**
- * Install the update.
- *  - Electron → quit and install
- *  - Capacitor → Apply OTA bundle and restart app instantly
+ * Legacy Install method (Electron).
  */
 export function installUpdate() {
     if (_isElectron && window.electronAPI?.installUpdate) {
         window.electronAPI.installUpdate();
         return;
     }
+}
 
-    if (_isCapacitor && _latestUpdateVersion) {
-        import('@capgo/capacitor-updater').then(({ CapacitorUpdater }) => {
-            CapacitorUpdater.set({ id: _latestUpdateVersion });
-        });
-        return;
+/**
+ * Start Native Android Browser Download.
+ */
+export function startNativeUpdate() {
+    if (_isCapacitor && _latestZipUrl) {
+        try {
+            // Save the new asset ID so we don't prompt again for the same APK
+            localStorage.setItem('last_installed_asset_id', _latestUpdateVersion);
+
+            // '_system' fires an Android system intent, bypassing the in-app browser.
+            // This lets the OS download the APK and trigger the native Package Installer.
+            window.open(_latestZipUrl, '_system');
+
+            _capEmit('onDownloaded', {});
+        } catch (err) {
+            console.error('Failed to open system browser for update', err);
+            _capEmit('onError', 'Failed to open system updater.');
+        }
     }
 }
 

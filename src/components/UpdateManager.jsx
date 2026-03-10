@@ -3,12 +3,9 @@ import './UpdateManager.css';
 import {
     hasUpdateSupport,
     onUpdateAvailable,
-    onUpdateProgress,
-    onUpdateDownloaded,
     onUpdateError,
     onUpdateNotAvailable,
-    downloadUpdate,
-    installUpdate,
+    startNativeUpdate,
 } from '../services/platformService';
 
 // UpdateManager now only handles download/install overlays when triggered
@@ -17,7 +14,6 @@ import {
 export function UpdateManager() {
     const [status, setStatus] = useState('idle');
     const [version, setVersion] = useState('');
-    const [progress, setProgress] = useState(0);
     const [isVisible, setIsVisible] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
 
@@ -27,17 +23,6 @@ export function UpdateManager() {
         const removeAvailableHelper = onUpdateAvailable((info) => {
             setVersion(info.version);
             setStatus('available');
-            setIsVisible(true);
-        });
-
-        const removeProgressHelper = onUpdateProgress((progressObj) => {
-            setStatus('downloading');
-            setProgress(progressObj.percent);
-            setIsVisible(true);
-        });
-
-        const removeDownloadedHelper = onUpdateDownloaded(() => {
-            setStatus('ready');
             setIsVisible(true);
         });
 
@@ -57,20 +42,19 @@ export function UpdateManager() {
 
         return () => {
             if (removeAvailableHelper) removeAvailableHelper();
-            if (removeProgressHelper) removeProgressHelper();
-            if (removeDownloadedHelper) removeDownloadedHelper();
             if (removeErrorHelper) removeErrorHelper();
             if (removeNotAvailableHelper) removeNotAvailableHelper();
         };
     }, []);
 
-    const handleDownload = () => {
-        downloadUpdate();
-        setStatus('downloading');
-    };
-
-    const handleInstall = () => {
-        installUpdate();
+    const handleUpdate = () => {
+        startNativeUpdate();
+        setStatus('downloading'); // Show temporary UI state
+        // Give the OS a second to open the browser, then hide the banner
+        setTimeout(() => {
+            setIsVisible(false);
+            setStatus('idle');
+        }, 1500);
     };
 
     const handleLater = () => {
@@ -110,7 +94,7 @@ export function UpdateManager() {
                                 <>
                                     <p>A new version <strong>{version}</strong> is available.</p>
                                     <div className="update-actions">
-                                        <button className="btn btn-primary" onClick={handleDownload}>Download Now</button>
+                                        <button className="btn btn-primary" onClick={handleUpdate}>Update Now</button>
                                         <button className="btn btn-ghost" onClick={handleLater}>Later</button>
                                     </div>
                                 </>
@@ -118,23 +102,7 @@ export function UpdateManager() {
 
                             {status === 'downloading' && (
                                 <>
-                                    <p>Downloading update...</p>
-                                    <div className="progress-bar-container">
-                                        <div
-                                            className="progress-bar-fill"
-                                            style={{ width: `${progress}%` }}
-                                        ></div>
-                                    </div>
-                                    <p className="text-right text-xs text-muted">{Math.round(progress)}%</p>
-                                </>
-                            )}
-
-                            {status === 'ready' && (
-                                <>
-                                    <p>Update downloaded.</p>
-                                    <div className="update-actions">
-                                        <button className="btn btn-primary" onClick={handleInstall}>Install & Restart</button>
-                                    </div>
+                                    <p>Opening System Installer...</p>
                                 </>
                             )}
                         </div>

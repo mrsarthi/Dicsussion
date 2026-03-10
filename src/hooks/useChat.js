@@ -18,7 +18,8 @@ import {
     onConnectionChange,
     onUserStatus,
     onReconnect,
-    getUser
+    getUser,
+    onGroupMessage
 } from '../services/socketService';
 import {
     saveMessage,
@@ -287,6 +288,37 @@ export function useChat(myAddress) {
                     });
                 }
             }, keys);
+
+            // Subscribe to server-delivered group messages (handles offline queued delivery)
+            onGroupMessage(async (msg) => {
+                if (!msg.groupId) return;
+
+                // Find the matching group contact
+                const groupContact = contacts.find(c => c.isGroup && c.address === msg.groupId);
+                if (!groupContact) return; // Not a group we know about, ignore
+
+                // Persist to local storage
+                try {
+                    await saveMessage(msg.groupId, msg);
+                } catch (err) {
+                    console.error('Failed to persists group message:', err);
+                }
+
+                // Add to messages state if the group chat is currently open
+                if (activeChatRef.current?.address === msg.groupId) {
+                    setMessages(prev => {
+                        if (prev.some(m => m.id === msg.id)) return prev;
+                        return [...prev, msg];
+                    });
+                } else {
+                    // Increment unread badge on the group contact
+                    setContacts(prev => prev.map(c =>
+                        c.address === msg.groupId
+                            ? { ...c, unreadCount: (c.unreadCount || 0) + 1, lastMessageTime: msg.timestamp }
+                            : c
+                    ));
+                }
+            });
 
             // ... (rest of init - receipts, connection, status) ...
             // Copying existing receipt/connection logic...

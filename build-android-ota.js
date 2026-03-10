@@ -8,28 +8,14 @@ try {
     // 1. Build the Vite project
     execSync('npm run build', { stdio: 'inherit' });
 
-    console.log('\n📦 Packaging dist.zip for OTA updates...');
+    console.log('\n📦 Syncing Web Assets to Android Studio Project...');
+    execSync('npm run cap:sync', { stdio: 'inherit' });
 
-    const distPath = path.join(__dirname, 'dist');
-    const releasePath = path.join(__dirname, 'release', 'android');
-    const zipPath = path.join(releasePath, 'dist.zip');
-
-    // Ensure release folder exists
-    if (!fs.existsSync(releasePath)) {
-        fs.mkdirSync(releasePath, { recursive: true });
-    }
-
-    // Since Windows doesn't always have 'zip' universally available, and JS zip libraries 
-    // aren't guaranteed to be installed, we use a neat PowerShell trick.
-    const psCommand = `Compress-Archive -Path "${distPath}\\*" -DestinationPath "${zipPath}" -Force`;
-
-    console.log(`Running: ${psCommand}`);
-    execSync(`powershell.exe -NoProfile -Command "${psCommand}"`, { stdio: 'inherit' });
-
-    console.log(`\n✅ Success! Your OTA update bundle is ready.`);
-    console.log(`📂 Location: ${zipPath}`);
+    console.log(`\n✅ Success! Your Web Assets are synced to the Android project.`);
     console.log(`\nWhat next?`);
-    console.log(`Upload BOTH your 'app-debug.apk' and this 'dist.zip' file to your GitHub Release!`);
+    console.log(`1. Open Android Studio`);
+    console.log(`2. Build your Signed 'app-release.apk' or 'app-debug.apk'`);
+    console.log(`3. Upload the APK file to your 'vLatest' / 'Production' GitHub Release!`);
 
 } catch (error) {
     console.error('\n❌ Build failed:', error.message);

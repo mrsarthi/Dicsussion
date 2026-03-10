@@ -63,6 +63,7 @@ export function initSocket() {
 
     socket.on('connect_error', (error) => {
         console.error('Connection error:', error.message);
+        alert(`Network Error: ${error.message}`);
     });
 
     // Handle incoming messages
@@ -70,6 +71,14 @@ export function initSocket() {
         console.log('📩 Received message via server');
         if (messageCallback) {
             messageCallback(msg);
+        }
+    });
+
+    // Handle incoming group messages (real-time + offline-queued delivery)
+    socket.on('groupMessage', (msg) => {
+        console.log('👥 Received group message via server');
+        if (groupMessageCallback) {
+            groupMessageCallback(msg);
         }
     });
 
@@ -131,9 +140,20 @@ export function register(address, publicKey, username = null) {
     // specific current user
     currentUser = { address, publicKey, username };
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+        let isResolved = false;
+
+        const timeout = setTimeout(() => {
+            if (!isResolved) {
+                alert(`Network Timeout: Failed to register session after 15 seconds. Please restart the app.`);
+                reject(new Error(`Timeout waiting for 'registered' event from server.`));
+            }
+        }, 15000);
+
         socket.emit('register', { address, publicKey, username });
         socket.once('registered', (data) => {
+            isResolved = true;
+            clearTimeout(timeout);
             console.log('✓ Registered with server:', data.address?.slice(0, 10), data.username ? `(@${data.username})` : '');
             resolve(data);
         });
@@ -196,6 +216,34 @@ export function sendMessage(to, messageData) {
  */
 export function onMessage(callback) {
     messageCallback = callback;
+}
+
+/**
+ * Send a group message (server fans out + queues for offline members)
+ * @param {string} groupId - The group's unique ID
+ * @param {string[]} members - Array of all member addresses (including sender)
+ * @param {Object} messageData - Encrypted message data
+ */
+export function sendGroupMessage(groupId, members, messageData) {
+    if (!socket?.connected) {
+        throw new Error('Not connected to server');
+    }
+    socket.emit('sendGroupMessage', {
+        groupId,
+        members,
+        ...messageData
+    });
+}
+
+/**
+ * Subscribe to incoming group messages (real-time + queued offline delivery)
+ * @param {Function} callback
+ * @returns {Function} unsubscribe function
+ */
+let groupMessageCallback = null;
+export function onGroupMessage(callback) {
+    groupMessageCallback = callback;
+    return () => { groupMessageCallback = null; };
 }
 
 /**

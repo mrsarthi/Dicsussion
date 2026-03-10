@@ -20,8 +20,8 @@ export function CreateGroupModal({ contacts, onClose, onCreate }) {
         onClose();
     };
 
-    // Filter out existing groups from contacts list
-    const availableContacts = contacts.filter(c => !c.isGroup);
+    // Filter out existing groups from contacts list (guard against undefined contacts)
+    const availableContacts = (contacts ?? []).filter(c => !c.isGroup);
 
     return (
         <div className="modal-overlay" onClick={onClose}>

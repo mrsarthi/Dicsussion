@@ -75,7 +75,6 @@
     "@capacitor/haptics": "^8.0.1",
     "@capacitor/keyboard": "^8.0.1",
     "@capacitor/status-bar": "^8.0.1",
-    "@capgo/capacitor-updater": "^8.43.9",
     "electron-updater": "^6.7.3",
     "ethers": "^6.16.0",
     "localforage": "^1.10.0",

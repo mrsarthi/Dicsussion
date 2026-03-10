@@ -4,13 +4,10 @@ import './SettingsModal.css';
 import {
     hasUpdateSupport,
     onUpdateAvailable,
-    onUpdateProgress,
-    onUpdateDownloaded,
     onUpdateError,
     onUpdateNotAvailable,
     checkForUpdates,
-    downloadUpdate,
-    installUpdate,
+    startNativeUpdate,
     getCurrentAppVersion,
 } from '../services/platformService';
 
@@ -57,15 +54,6 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
             setUpdateStatus('no-update');
         });
 
-        const removeProgress = onUpdateProgress((progressObj) => {
-            setUpdateStatus(prev => (prev === 'error' || prev === 'ready') ? prev : 'downloading');
-            setUpdateProgress(progressObj.percent);
-        });
-
-        const removeDownloaded = onUpdateDownloaded(() => {
-            setUpdateStatus('ready');
-        });
-
         const removeError = onUpdateError((err) => {
             setUpdateStatus('error');
             setUpdateError(err);
@@ -74,8 +62,6 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
         return () => {
             if (removeAvailable) removeAvailable();
             if (removeNotAvailable) removeNotAvailable();
-            if (removeProgress) removeProgress();
-            if (removeDownloaded) removeDownloaded();
             if (removeError) removeError();
         };
     }, []);
@@ -87,15 +73,12 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
         checkForUpdates();
     };
 
-    const handleDownload = () => {
+    const handleInstallUpdate = () => {
         if (!hasUpdateSupport) return;
-        setUpdateStatus('downloading');
-        downloadUpdate();
-    };
-
-    const handleInstall = () => {
-        if (!hasUpdateSupport) return;
-        installUpdate();
+        setUpdateStatus('installing');
+        startNativeUpdate();
+        // Dismiss the installing state after a second — the system browser takes over
+        setTimeout(() => setUpdateStatus('idle'), 1500);
     };
 
     // Find nearest preset label
@@ -187,8 +170,8 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
                                     🎉 A new version <strong>v{updateVersion}</strong> is available!
                                 </p>
                                 <div className="update-inline-actions">
-                                    <button className="btn btn-primary settings-action-btn" onClick={handleDownload}>
-                                        Download Now
+                                    <button className="btn btn-primary settings-action-btn" onClick={handleInstallUpdate}>
+                                        Install Update
                                     </button>
                                     <button className="btn btn-ghost settings-action-btn" onClick={() => setUpdateStatus('idle')}>
                                         Later
@@ -197,22 +180,9 @@ export function SettingsModal({ onClose, onDeleteAccount }) {
                             </div>
                         )}
 
-                        {updateStatus === 'downloading' && (
+                        {updateStatus === 'installing' && (
                             <div className="update-inline-block">
-                                <p className="update-inline-text">Downloading update...</p>
-                                <div className="update-progress-bar">
-                                    <div className="update-progress-fill" style={{ width: `${updateProgress}%` }}></div>
-                                </div>
-                                <span className="update-progress-label">{Math.round(updateProgress)}%</span>
-                            </div>
-                        )}
-
-                        {updateStatus === 'ready' && (
-                            <div className="update-inline-block">
-                                <p className="update-inline-text">✅ Update downloaded and ready!</p>
-                                <button className="btn btn-primary settings-action-btn" onClick={handleInstall}>
-                                    Install & Restart
-                                </button>
+                                <p className="update-inline-text">🚀 Opening System Installer...</p>
                             </div>
                         )}
 
