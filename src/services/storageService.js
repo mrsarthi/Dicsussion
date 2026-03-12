@@ -168,6 +168,7 @@ export async function saveContacts(contacts) {
             username: c.username,
             isGroup: c.isGroup,
             members: c.members, // Crucial for groups
+            admins: c.admins,   // Crucial for group admin features
             lastMessageTime: c.lastMessageTime,
             unreadCount: c.unreadCount,
             // Don't save online status, meaningless on reload

@@ -26,6 +26,8 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
         sendMessage,
         sendTyping,
         createGroup,
+        deleteGroup,
+        removeMember,
         searchAndAddContact,
         clearError,
     } = useChat(walletAddress);
@@ -403,6 +405,8 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                 group={activeChat.isGroup ? activeChat.info : null}
                                 onClose={() => setShowGroupDetails(false)}
                                 myAddress={walletAddress}
+                                onDeleteGroup={deleteGroup}
+                                onRemoveMember={removeMember}
                             />
                         )}
 

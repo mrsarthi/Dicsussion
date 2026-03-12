@@ -26,7 +26,8 @@ import {
     getLocalHistory,
     saveMessagesBulk,
     saveContacts,
-    getSavedContacts
+    getSavedContacts,
+    clearHistory
 } from '../services/storageService';
 
 export function useChat(myAddress) {
@@ -81,9 +82,60 @@ export function useChat(myAddress) {
         };
 
         setContacts(prev => [groupContact, ...prev]);
-        setActiveChat({ address: groupId, info: groupContact, isGroup: true });
+        setActiveChat({ address: groupId, info: groupContact, isGroup: true, members: groupContact.members });
         return groupContact;
     }, [myAddress]);
+
+    const deleteGroup = useCallback(async (groupId) => {
+        if (!groupId) return;
+        // Remove from contacts
+        setContacts(prev => prev.filter(c => c.address !== groupId));
+        // Clear local message history
+        await clearHistory(groupId);
+        // Close chat if this group is currently open
+        if (activeChatRef.current?.address === groupId) {
+            setActiveChat(null);
+            setMessages([]);
+        }
+        console.log(`🗑️ Group ${groupId} deleted`);
+    }, []);
+
+    const removeMember = useCallback(async (groupId, memberAddress) => {
+        if (!groupId || !memberAddress) return;
+        // If removing self, treat as leaving the group
+        if (memberAddress.toLowerCase() === myAddress?.toLowerCase()) {
+            await deleteGroup(groupId);
+            return;
+        }
+        // Update the members list in contacts
+        setContacts(prev => prev.map(c => {
+            if (c.address === groupId && c.isGroup) {
+                return {
+                    ...c,
+                    members: (c.members || []).filter(
+                        m => m.toLowerCase() !== memberAddress.toLowerCase()
+                    )
+                };
+            }
+            return c;
+        }));
+        // Also update active chat if this group is open
+        if (activeChatRef.current?.address === groupId) {
+            setActiveChat(prev => ({
+                ...prev,
+                members: (prev.members || []).filter(
+                    m => m.toLowerCase() !== memberAddress.toLowerCase()
+                ),
+                info: {
+                    ...prev.info,
+                    members: (prev.info?.members || []).filter(
+                        m => m.toLowerCase() !== memberAddress.toLowerCase()
+                    )
+                }
+            }));
+        }
+        console.log(`👤 Removed ${memberAddress.slice(0, 10)} from group ${groupId}`);
+    }, [myAddress, deleteGroup]);
 
     const sendTyping = useCallback((isTyping) => {
         if (!activeChat || !myAddress) return;
@@ -679,6 +731,8 @@ export function useChat(myAddress) {
         sendMessage,
         sendTyping,
         createGroup,
+        deleteGroup,
+        removeMember,
         searchAndAddContact,
         clearError: () => setError(null),
     };

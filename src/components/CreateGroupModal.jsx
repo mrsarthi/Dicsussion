@@ -5,6 +5,7 @@ import './CreateGroupModal.css';
 export function CreateGroupModal({ contacts, onClose, onCreate }) {
     const [groupName, setGroupName] = useState('');
     const [selectedMembers, setSelectedMembers] = useState([]);
+    const [isCreating, setIsCreating] = useState(false);
 
     const toggleMember = (address) => {
         if (selectedMembers.includes(address)) {
@@ -14,21 +15,27 @@ export function CreateGroupModal({ contacts, onClose, onCreate }) {
         }
     };
 
-    const handleCreate = () => {
-        if (!groupName.trim() || selectedMembers.length === 0) return;
-        onCreate(groupName, selectedMembers);
-        onClose();
+    const handleCreate = async () => {
+        if (!groupName.trim() || selectedMembers.length === 0 || isCreating) return;
+        setIsCreating(true);
+        try {
+            await onCreate(groupName, selectedMembers);
+            onClose();
+        } catch (err) {
+            console.error('Failed to create group:', err);
+            setIsCreating(false);
+        }
     };
 
     // Filter out existing groups from contacts list (guard against undefined contacts)
     const availableContacts = (contacts ?? []).filter(c => !c.isGroup);
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onClick={!isCreating ? onClose : undefined}>
             <div className="modal-content glass-card" onClick={e => e.stopPropagation()}>
                 <header className="modal-header">
                     <h3>Create New Group</h3>
-                    <button className="close-modal-btn" onClick={onClose}>×</button>
+                    <button className="close-modal-btn" onClick={onClose} disabled={isCreating}>×</button>
                 </header>
 
                 <div className="modal-body">
@@ -40,6 +47,7 @@ export function CreateGroupModal({ contacts, onClose, onCreate }) {
                         value={groupName}
                         onChange={(e) => setGroupName(e.target.value)}
                         autoFocus
+                        disabled={isCreating}
                     />
 
                     <label className="block mb-2 text-sm font-medium">Select Members</label>
@@ -53,7 +61,7 @@ export function CreateGroupModal({ contacts, onClose, onCreate }) {
                                 <div
                                     key={contact.address}
                                     className={`member-option ${selectedMembers.includes(contact.address) ? 'selected' : ''}`}
-                                    onClick={() => toggleMember(contact.address)}
+                                    onClick={() => !isCreating && toggleMember(contact.address)}
                                 >
                                     <div className="checkbox-visual">✓</div>
                                     <div className="avatar small">
@@ -70,13 +78,13 @@ export function CreateGroupModal({ contacts, onClose, onCreate }) {
                 </div>
 
                 <footer className="modal-footer">
-                    <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+                    <button className="btn btn-ghost" onClick={onClose} disabled={isCreating}>Cancel</button>
                     <button
                         className="btn btn-primary"
-                        disabled={!groupName.trim() || selectedMembers.length === 0}
+                        disabled={!groupName.trim() || selectedMembers.length === 0 || isCreating}
                         onClick={handleCreate}
                     >
-                        Create Group
+                        {isCreating ? 'Creating...' : 'Create Group'}
                     </button>
                 </footer>
             </div>
