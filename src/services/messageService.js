@@ -69,6 +69,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
             transport: 'queued',
             groupId: metadata.groupId,
             groupName: metadata.groupName,
+            members: metadata.members,
             type: metadata.type || 'text',
         };
         await savePendingMessage(outboxMessage);
@@ -98,6 +99,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         // Group metadata
         groupId: metadata.groupId,
         groupName: metadata.groupName,
+        members: metadata.members,
         from: senderAddress,
         type: metadata.type || 'text', // Default to text
     };
@@ -146,6 +148,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
                 transport: 'queued',
                 groupId: metadata.groupId,
                 groupName: metadata.groupName,
+                members: metadata.members,
                 type: metadata.type || 'text',
             };
         }
@@ -166,6 +169,7 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
         transport: p2pSent ? 'p2p' : 'relay',
         groupId: metadata.groupId,
         groupName: metadata.groupName,
+        members: metadata.members,
         type: metadata.type || 'text',
     };
 }
@@ -409,6 +413,7 @@ export async function flushPendingMessages(senderAddress, onFlushed = null) {
                 timestamp: msg.timestamp,
                 groupId: msg.groupId,
                 groupName: msg.groupName,
+                members: msg.members,
                 from: msg.from,
                 type: msg.type || 'text',
             };

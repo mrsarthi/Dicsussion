@@ -19,7 +19,11 @@ import {
     onUserStatus,
     onReconnect,
     getUser,
-    onGroupMessage
+    onGroupMessage,
+    emitCreateGroup,
+    emitDeleteGroup,
+    onGroupCreated,
+    onGroupDeleted
 } from '../services/socketService';
 import {
     saveMessage,
@@ -70,11 +74,12 @@ export function useChat(myAddress) {
 
     const createGroup = useCallback(async (groupName, memberAddresses) => {
         const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const allMembers = [...new Set([myAddress, ...memberAddresses])];
         const groupContact = {
             address: groupId, // Use groupId as the address key
             username: groupName,
             isGroup: true,
-            members: [...new Set([myAddress, ...memberAddresses])], // Ensure I am in the list
+            members: allMembers,
             admins: [myAddress],
             lastMessageTime: Date.now(),
             unreadCount: 0,
@@ -83,11 +88,24 @@ export function useChat(myAddress) {
 
         setContacts(prev => [groupContact, ...prev]);
         setActiveChat({ address: groupId, info: groupContact, isGroup: true, members: groupContact.members });
+
+        // Notify all members via the server so it shows up on their devices
+        emitCreateGroup(groupId, groupName, allMembers, [myAddress]);
+
         return groupContact;
     }, [myAddress]);
 
     const deleteGroup = useCallback(async (groupId) => {
         if (!groupId) return;
+
+        // Capture members BEFORE removing the group so we can notify them
+        let groupMembers = [];
+        setContacts(prev => {
+            const group = prev.find(c => c.address === groupId && c.isGroup);
+            if (group) groupMembers = group.members || [];
+            return prev;
+        });
+
         // Remove from contacts
         setContacts(prev => prev.filter(c => c.address !== groupId));
         // Clear local message history
@@ -97,7 +115,13 @@ export function useChat(myAddress) {
             setActiveChat(null);
             setMessages([]);
         }
-        console.log(`🗑️ Group ${groupId} deleted`);
+
+        // Notify all members via the server so they also remove it
+        if (groupMembers.length > 0) {
+            emitDeleteGroup(groupId, groupMembers);
+        }
+
+        console.log(`🗑️ Group ${groupId} deleted and members notified`);
     }, []);
 
     const removeMember = useCallback(async (groupId, memberAddress) => {
@@ -369,6 +393,50 @@ export function useChat(myAddress) {
                             ? { ...c, unreadCount: (c.unreadCount || 0) + 1, lastMessageTime: msg.timestamp }
                             : c
                     ));
+                }
+            });
+
+            // Listen for group created events (other members notifying us)
+            onGroupCreated((data) => {
+                const { groupId, groupName, members, admins, createdBy } = data;
+                if (!groupId) return;
+
+                // Add group to contacts if we don't already have it
+                setContacts(prev => {
+                    const exists = prev.some(c => c.address.toLowerCase() === groupId.toLowerCase());
+                    if (exists) return prev;
+
+                    console.log(`👥 New group received: ${groupName} (${groupId.slice(0, 10)})`);
+                    return [{
+                        address: groupId,
+                        username: groupName || 'Unknown Group',
+                        isGroup: true,
+                        members: members || [myAddress, createdBy],
+                        admins: admins || [createdBy],
+                        lastMessageTime: data.timestamp || Date.now(),
+                        unreadCount: 0,
+                        online: true
+                    }, ...prev];
+                });
+            });
+
+            // Listen for group deleted events (admin deleted the group)
+            onGroupDeleted(async (data) => {
+                const { groupId } = data;
+                if (!groupId) return;
+
+                console.log(`👥 Group deleted notification: ${groupId.slice(0, 10)}`);
+
+                // Remove from contacts
+                setContacts(prev => prev.filter(c => c.address !== groupId));
+
+                // Clear local message history
+                await clearHistory(groupId);
+
+                // Close chat if this group is currently open
+                if (activeChatRef.current?.address === groupId) {
+                    setActiveChat(null);
+                    setMessages([]);
                 }
             });
 

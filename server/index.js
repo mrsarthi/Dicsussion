@@ -156,7 +156,18 @@ io.on('connection', (socket) => {
             // Small delay to ensure client-side handlers are fully set up
             setTimeout(() => {
                 pending.forEach(msg => {
-                    socket.emit('message', msg);
+                    if (msg._isGroupCreated) {
+                        // Deliver as groupCreated event
+                        socket.emit('groupCreated', msg);
+                    } else if (msg._isGroupDeleted) {
+                        // Deliver as groupDeleted event
+                        socket.emit('groupDeleted', msg);
+                    } else if (msg._isGroupMessage) {
+                        // Deliver as groupMessage event
+                        socket.emit('groupMessage', msg);
+                    } else {
+                        socket.emit('message', msg);
+                    }
                 });
             }, 200);
             offlineMessages.delete(normalizedAddress);
@@ -417,6 +428,83 @@ io.on('connection', (socket) => {
             });
             console.log(`[✓] ${type} receipt: ${messageId.slice(0, 15)}... to ${toAddress.slice(0, 6)}`);
         }
+    });
+
+    // ====== GROUP LIFECYCLE EVENTS ======
+
+    // Create group — fan out to all members so they know about the new group
+    socket.on('createGroup', ({ groupId, groupName, members, admins }) => {
+        if (!groupId || !Array.isArray(members) || members.length === 0) return;
+
+        const payload = {
+            groupId,
+            groupName,
+            members,
+            admins: admins || [socket.address],
+            createdBy: socket.address,
+            timestamp: Date.now()
+        };
+
+        let deliveredCount = 0;
+        let queuedCount = 0;
+
+        members.forEach(memberAddr => {
+            const toAddress = memberAddr.toLowerCase();
+
+            // Don't send back to the creator
+            if (toAddress === socket.address) return;
+
+            const recipient = users.get(toAddress);
+
+            if (recipient && recipient.online) {
+                io.to(recipient.socketId).emit('groupCreated', payload);
+                deliveredCount++;
+            } else {
+                // Queue for offline delivery
+                const pending = offlineMessages.get(toAddress) || [];
+                pending.push({ ...payload, _isGroupCreated: true });
+                offlineMessages.set(toAddress, pending);
+                queuedCount++;
+            }
+        });
+
+        console.log(`[👥+] Group created ${groupId?.slice(0, 8)}: ${deliveredCount} notified, ${queuedCount} queued`);
+    });
+
+    // Delete group — fan out to all members so they remove it
+    socket.on('deleteGroup', ({ groupId, members }) => {
+        if (!groupId || !Array.isArray(members) || members.length === 0) return;
+
+        const payload = {
+            groupId,
+            deletedBy: socket.address,
+            timestamp: Date.now()
+        };
+
+        let deliveredCount = 0;
+        let queuedCount = 0;
+
+        members.forEach(memberAddr => {
+            const toAddress = memberAddr.toLowerCase();
+
+            // Don't send back to the admin who deleted
+            if (toAddress === socket.address) return;
+
+            const recipient = users.get(toAddress);
+
+            if (recipient && recipient.online) {
+                io.to(recipient.socketId).emit('groupDeleted', payload);
+                deliveredCount++;
+            } else {
+                // Queue for offline delivery
+                const pending = offlineMessages.get(toAddress) || [];
+                pending.push({ ...payload, _isGroupDeleted: true });
+                offlineMessages.set(toAddress, pending);
+                queuedCount++;
+            }
+        });
+
+        console.log(`[👥-] Group deleted ${groupId?.slice(0, 8)}: ${deliveredCount} notified, ${queuedCount} queued`);
     });
 
     // Disconnect handling

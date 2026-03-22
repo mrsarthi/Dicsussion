@@ -14,6 +14,8 @@ let userStatusListeners = [];
 let reconnectCallbacks = []; // Fired when socket reconnects after a disconnect
 let wasDisconnected = false; // Track if we were previously disconnected
 let activeAuthSessionId = null; // Track active auth relay session to handle reconnections
+let groupCreatedCallback = null;
+let groupDeletedCallback = null;
 
 /**
  * Initialize socket connection
@@ -119,6 +121,17 @@ export function initSocket() {
     socket.on('userStatus', (data) => {
         console.log(`👤 User status update: ${data.address?.slice(0, 10)} is ${data.online ? 'Online' : 'Offline'}`);
         userStatusListeners.forEach(listener => listener(data));
+    });
+
+    // Handle group lifecycle events
+    socket.on('groupCreated', (data) => {
+        console.log('👥+ Group created notification:', data.groupId?.slice(0, 10));
+        if (groupCreatedCallback) groupCreatedCallback(data);
+    });
+
+    socket.on('groupDeleted', (data) => {
+        console.log('👥- Group deleted notification:', data.groupId?.slice(0, 10));
+        if (groupDeletedCallback) groupDeletedCallback(data);
     });
 
     return socket;
@@ -317,6 +330,40 @@ export function sendReceipt(messageId, to, type) {
 export function sendSignal(to, signal) {
     if (!socket?.connected) return;
     socket.emit('signal', { to, signal });
+}
+
+// ====== GROUP LIFECYCLE ======
+
+/**
+ * Notify server about new group creation (server fans out to members)
+ */
+export function emitCreateGroup(groupId, groupName, members, admins) {
+    if (!socket?.connected) return;
+    socket.emit('createGroup', { groupId, groupName, members, admins });
+}
+
+/**
+ * Notify server about group deletion (server fans out to members)
+ */
+export function emitDeleteGroup(groupId, members) {
+    if (!socket?.connected) return;
+    socket.emit('deleteGroup', { groupId, members });
+}
+
+/**
+ * Subscribe to group created events
+ * @param {Function} callback - ({ groupId, groupName, members, admins, createdBy }) => void
+ */
+export function onGroupCreated(callback) {
+    groupCreatedCallback = callback;
+}
+
+/**
+ * Subscribe to group deleted events
+ * @param {Function} callback - ({ groupId, deletedBy }) => void
+ */
+export function onGroupDeleted(callback) {
+    groupDeletedCallback = callback;
 }
 
 /**
