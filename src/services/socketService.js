@@ -23,11 +23,17 @@ let groupDeletedCallback = null;
 export function initSocket() {
     if (socket?.connected) return socket;
 
+    // Wake up Render server (cold start can take 30-60s on free tier)
+    // Fire an HTTP request BEFORE opening the socket so the server spins up
+    fetch(SERVER_URL, { method: 'GET', mode: 'no-cors' }).catch(() => {});
+
     socket = io(SERVER_URL, {
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: 10,
+        reconnectionAttempts: Infinity,  // Never give up
         reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,     // Cap at 10s between attempts
+        timeout: 30000,                  // 30s connection timeout for cold starts
     });
 
     socket.on('connect', () => {

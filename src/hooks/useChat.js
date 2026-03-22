@@ -733,6 +733,13 @@ export function useChat(myAddress) {
                 // Ignore if no server history
             }
 
+            // Filter out group messages from DM history (they may have been
+            // stored before the server-side fix was deployed)
+            const isGroupChat = contact?.isGroup || false;
+            if (!isGroupChat) {
+                merged = merged.filter(m => !m.groupId);
+            }
+
             setMessages(merged.map(m => ({
                 ...m,
                 status: 'read'

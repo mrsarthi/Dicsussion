@@ -46,8 +46,11 @@ function getConversationId(addr1, addr2) {
     return `${sorted[0]}_${sorted[1]}`;
 }
 
-// Helper: Store message in history
+// Helper: Store message in history (DMs only — group messages are handled separately)
 function storeMessage(msg) {
+    // Skip group messages — they shouldn't pollute DM history
+    if (msg.groupId) return;
+
     const convId = getConversationId(msg.from, msg.to);
     const history = messageHistory.get(convId) || [];
     // Avoid duplicates
