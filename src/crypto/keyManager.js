@@ -35,7 +35,8 @@ export async function getOrCreateKeys(walletAddress, signMessageFn) {
 
     // Need to create new keys
     // Ask user to sign a message to derive deterministic keys
-    const message = `DecentraChat Key Generation\n\nThis signature will be used to generate your encryption keys.\nWallet: ${walletAddress}\nTimestamp: ${Date.now()}`;
+    // CRITICAL: This message must be identical forever for a given wallet address
+    const message = `DecentraChat Key Generation\n\nThis signature will logically prove you own this wallet and generate your static end-to-end encryption keys.\nWallet: ${walletAddress.toLowerCase()}`;
 
     const signature = await signMessageFn(message);
     const keys = deriveKeysFromSignature(signature);
