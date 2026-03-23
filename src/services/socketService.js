@@ -478,6 +478,15 @@ export function fetchOfflineMessages() {
 }
 
 /**
+ * Acknowledge receipt of offline messages so the server deletes them from its holding queue
+ * @param {string[]} messageIds 
+ */
+export function ackOfflineMessages(messageIds) {
+    if (!socket?.connected || !messageIds || messageIds.length === 0) return;
+    socket.emit('ackOfflineMessages', { messageIds });
+}
+
+/**
  * Get status for multiple users
  * @param {string[]} addresses
  */

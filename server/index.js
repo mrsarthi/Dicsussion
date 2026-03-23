@@ -75,8 +75,42 @@ const io = new Server(server, {
 
 // In-memory stores (use Redis/SQLite for production persistence)
 const users = new Map(); // address -> { socketId, publicKey, online, username }
+const fs = require('fs');
+
 const usernames = new Map(); // username -> address (for lookup)
-const offlineMessages = new Map(); // address -> [messages]
+
+// Offline Messages setup with File Persistence
+const OFFLINE_DB_PATH = path.join(__dirname, 'offline_messages.json');
+let offlineMessages = new Map(); // address -> [messages]
+
+try {
+    if (fs.existsSync(OFFLINE_DB_PATH)) {
+        const data = fs.readFileSync(OFFLINE_DB_PATH, 'utf8');
+        const parsed = JSON.parse(data);
+        for (const address in parsed) {
+            offlineMessages.set(address, parsed[address]);
+        }
+        console.log(`[📦] Loaded offline messages for ${Object.keys(parsed).length} users from disk.`);
+    }
+} catch (err) {
+    console.error('[📦] Error loading offline_messages.json:', err);
+}
+
+let dbSaveTimeout = null;
+function saveOfflineMessagesDb() {
+    if (dbSaveTimeout) clearTimeout(dbSaveTimeout);
+    dbSaveTimeout = setTimeout(() => {
+        const obj = {};
+        for (const [address, msgs] of offlineMessages.entries()) {
+            if (msgs.length > 0) {
+                obj[address] = msgs;
+            }
+        }
+        fs.writeFile(OFFLINE_DB_PATH, JSON.stringify(obj), 'utf8', (err) => {
+            if (err) console.error('[📦] Error saving offline_messages.json:', err);
+        });
+    }, 500); // Debounce saves by 500ms
+}
 const messageHistory = new Map(); // conversationId -> [messages]
 const peerConnections = new Map(); // peerId -> { from, to }
 const authResults = new Map(); // sessionId -> { address, signature, timestamp }
@@ -237,8 +271,27 @@ io.on('connection', (socket) => {
                     socket.emit('message', msg);
                 }
             });
-            offlineMessages.delete(socket.address);
+            // DO NOT DELETE here. Wait for ACK from client.
         }
+    });
+
+    socket.on('ackOfflineMessages', ({ messageIds }) => {
+        if (!socket.address || !Array.isArray(messageIds) || messageIds.length === 0) return;
+        
+        const pending = offlineMessages.get(socket.address) || [];
+        const originalLength = pending.length;
+        
+        // Filter out the messages that the client successfully acknowledged
+        const remaining = pending.filter(msg => !messageIds.includes(msg.id || msg.messageId));
+        
+        if (remaining.length === 0) {
+            offlineMessages.delete(socket.address);
+        } else {
+            offlineMessages.set(socket.address, remaining);
+        }
+        
+        saveOfflineMessagesDb();
+        console.log(`[✔️] Client ${socket.address.slice(0, 6)} ACKed ${originalLength - remaining.length} messages. ${remaining.length} remaining.`);
     });
 
     socket.on('updateProfile', ({ avatar, status }) => {
@@ -376,6 +429,7 @@ io.on('connection', (socket) => {
             const pending = offlineMessages.get(toAddress) || [];
             pending.push(fullMessage);
             offlineMessages.set(toAddress, pending);
+            saveOfflineMessagesDb();
             socket.emit('messageStatus', { id: fullMessage.id, status: 'stored' });
             console.log(`[📦] Message stored for offline: ${toAddress.slice(0, 6)}`);
             pushOfflineNotification(toAddress, fullMessage, 'dm');
@@ -419,6 +473,7 @@ io.on('connection', (socket) => {
                 // Tag so the client knows it's a group message on reconnect
                 pending.push({ ...fullMessage, _isGroupMessage: true });
                 offlineMessages.set(toAddress, pending);
+                saveOfflineMessagesDb();
                 queuedCount++;
                 pushOfflineNotification(toAddress, fullMessage, 'group');
             }
@@ -529,6 +584,7 @@ io.on('connection', (socket) => {
         if (!groupId || !Array.isArray(members) || members.length === 0) return;
 
         const payload = {
+            id: `gc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             groupId,
             groupName,
             members,
@@ -556,6 +612,7 @@ io.on('connection', (socket) => {
                 const pending = offlineMessages.get(toAddress) || [];
                 pending.push({ ...payload, _isGroupCreated: true });
                 offlineMessages.set(toAddress, pending);
+                saveOfflineMessagesDb();
                 queuedCount++;
                 pushOfflineNotification(toAddress, payload, 'groupCreated');
             }
@@ -569,6 +626,7 @@ io.on('connection', (socket) => {
         if (!groupId || !Array.isArray(members) || members.length === 0) return;
 
         const payload = {
+            id: `gd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             groupId,
             deletedBy: socket.address,
             timestamp: Date.now()
@@ -593,6 +651,7 @@ io.on('connection', (socket) => {
                 const pending = offlineMessages.get(toAddress) || [];
                 pending.push({ ...payload, _isGroupDeleted: true });
                 offlineMessages.set(toAddress, pending);
+                saveOfflineMessagesDb();
                 queuedCount++;
             }
         });
@@ -606,6 +665,7 @@ io.on('connection', (socket) => {
         if (!messageId || !emoji) return;
 
         const payload = {
+            id: `rx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             messageId,
             emoji,
             action: action || 'add',
@@ -629,6 +689,7 @@ io.on('connection', (socket) => {
                 const pending = offlineMessages.get(toAddress) || [];
                 pending.push({ ...payload, _isReaction: true });
                 offlineMessages.set(toAddress, pending);
+                saveOfflineMessagesDb();
                 pushOfflineNotification(toAddress, payload, 'reaction');
             }
         });

@@ -316,6 +316,7 @@ export function useChat(myAddress) {
                 // Save to local storage immediately
                 try {
                     await saveMessage(contactId, msg);
+                    if (msg.id) ackOfflineMessages([msg.id]);
                     console.log(`💾 Persisted incoming message from ${contactId}`);
                 } catch (err) {
                     console.error('❌ Failed to persist incoming message:', err);
@@ -439,6 +440,7 @@ export function useChat(myAddress) {
                 // Persist to local storage
                 try {
                     await saveMessage(msg.groupId, msg);
+                    if (msg.id) ackOfflineMessages([msg.id]);
                 } catch (err) {
                     console.error('Failed to persists group message:', err);
                 }
@@ -461,8 +463,11 @@ export function useChat(myAddress) {
 
             // Listen for group created events (other members notifying us)
             onGroupCreated((data) => {
-                const { groupId, groupName, members, admins, createdBy } = data;
+                const { id, groupId, groupName, members, admins, createdBy } = data;
                 if (!groupId) return;
+
+                // ACK delivery immediately upon processing
+                if (id) ackOfflineMessages([id]);
 
                 // Add group to contacts if we don't already have it
                 setContacts(prev => {
@@ -485,10 +490,13 @@ export function useChat(myAddress) {
 
             // Listen for group deleted events (admin deleted the group)
             onGroupDeleted(async (data) => {
-                const { groupId } = data;
+                const { id, groupId } = data;
                 if (!groupId) return;
 
                 console.log(`👥 Group deleted notification: ${groupId.slice(0, 10)}`);
+
+                // ACK delivery immediately
+                if (id) ackOfflineMessages([id]);
 
                 // Remove from contacts
                 setContacts(prev => prev.filter(c => c.address !== groupId));
@@ -505,8 +513,11 @@ export function useChat(myAddress) {
 
             // Listen for incoming reactions from other participants
             onReaction((data) => {
-                const { messageId, emoji, from, action } = data;
+                const { id, messageId, emoji, from, action } = data;
                 if (!messageId || !emoji || !from) return;
+
+                // ACK delivery immediately
+                if (id) ackOfflineMessages([id]);
 
                 // Update messages state if we have this message loaded
                 setMessages(prev => {
