@@ -209,29 +209,6 @@ io.on('connection', (socket) => {
             username: existingUsername
         });
 
-        // THEN deliver any offline messages (handlers are now ready)
-        const pending = offlineMessages.get(normalizedAddress) || [];
-        if (pending.length > 0) {
-            console.log(`[→] Delivering ${pending.length} offline messages to ${normalizedAddress.slice(0, 10)}...`);
-            // Small delay to ensure client-side handlers are fully set up
-            setTimeout(() => {
-                pending.forEach(msg => {
-                    if (msg._isReaction) {
-                        socket.emit('messageReaction', msg);
-                    } else if (msg._isGroupCreated) {
-                        socket.emit('groupCreated', msg);
-                    } else if (msg._isGroupDeleted) {
-                        socket.emit('groupDeleted', msg);
-                    } else if (msg._isGroupMessage) {
-                        socket.emit('groupMessage', msg);
-                    } else {
-                        socket.emit('message', msg);
-                    }
-                });
-            }, 200);
-            offlineMessages.delete(normalizedAddress);
-        }
-
         // Broadcast online status to everyone else
         socket.broadcast.emit('userStatus', {
             address: normalizedAddress,
@@ -240,6 +217,28 @@ io.on('connection', (socket) => {
             avatar: finalAvatar,
             status: finalStatus
         });
+    });
+
+    socket.on('fetchOfflineMessages', () => {
+        if (!socket.address) return;
+        const pending = offlineMessages.get(socket.address) || [];
+        if (pending.length > 0) {
+            console.log(`[→] Delivering ${pending.length} offline messages to ${socket.address.slice(0, 10)}...`);
+            pending.forEach(msg => {
+                if (msg._isReaction) {
+                    socket.emit('messageReaction', msg);
+                } else if (msg._isGroupCreated) {
+                    socket.emit('groupCreated', msg);
+                } else if (msg._isGroupDeleted) {
+                    socket.emit('groupDeleted', msg);
+                } else if (msg._isGroupMessage) {
+                    socket.emit('groupMessage', msg);
+                } else {
+                    socket.emit('message', msg);
+                }
+            });
+            offlineMessages.delete(socket.address);
+        }
     });
 
     socket.on('updateProfile', ({ avatar, status }) => {

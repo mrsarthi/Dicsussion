@@ -26,7 +26,8 @@ import {
     onGroupDeleted,
     emitReaction,
     onReaction,
-    updateProfile as updateSocketProfile
+    updateProfile as updateSocketProfile,
+    fetchOfflineMessages
 } from '../services/socketService';
 import {
     saveMessage,
@@ -582,12 +583,18 @@ export function useChat(myAddress) {
             await registerUser(myAddress, keys.publicKey);
             if (!mounted) return;
 
+            // Handlers are up, Explicitly ask server to dump offline messages
+            fetchOfflineMessages();
+
             initializedRef.current = true;
 
             // === RECONNECT HANDLER ===
             // On reconnect: flush outbox + sync missed messages for all contacts
             reconnectUnsubscribeRef.current = onReconnect(async () => {
                 console.log('🔄 Reconnect detected. Syncing offline messages...');
+
+                // 0. Fetch anything queued in the server's volatile offlineMessages map
+                fetchOfflineMessages();
 
                 // 1. Flush outbox (send queued messages)
                 setFlushingOutbox(true);

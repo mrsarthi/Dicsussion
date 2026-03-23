@@ -470,6 +470,14 @@ export function updatePushToken(token) {
 }
 
 /**
+ * Request delivery of any queued offline messages
+ */
+export function fetchOfflineMessages() {
+    if (!socket?.connected) return;
+    socket.emit('fetchOfflineMessages');
+}
+
+/**
  * Get status for multiple users
  * @param {string[]} addresses
  */
