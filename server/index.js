@@ -11,14 +11,28 @@ const admin = require('firebase-admin');
 // Initialize Firebase Admin for Push Notifications
 let fcmReady = false;
 try {
-    const serviceAccount = require('./serviceAccountKey.json');
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-    });
-    fcmReady = true;
-    console.log('[Firebase] Push notifications initialized successfully.');
+    let serviceAccount;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        // Support for Render/Production environments via Environment Variable
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+        // Local development fallback
+        serviceAccount = require('./serviceAccountKey.json');
+    }
+
+    if (serviceAccount) {
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        fcmReady = true;
+        console.log('[Firebase] Push notifications initialized successfully.');
+    }
 } catch (err) {
-    console.warn('[Firebase] Warning: serviceAccountKey.json not found or invalid. Push notifications are disabled.');
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        console.error('[Firebase] Error parsing FIREBASE_SERVICE_ACCOUNT environment variable:', err.message);
+    } else {
+        console.warn('[Firebase] Warning: serviceAccountKey.json not found or invalid. Push notifications are disabled.');
+    }
 }
 
 // Helper: Send Push Notification
