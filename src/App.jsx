@@ -4,11 +4,12 @@ import { WalletProvider, useWallet } from './context/WalletContext';
 import { WalletConnect } from './components/WalletConnect';
 import { ChatInterface } from './components/ChatInterface';
 import { UsernameSetup } from './components/UsernameSetup';
-import { initSocket, register, disconnect } from './services/socketService';
+import { initSocket, register, disconnect, updatePushToken } from './services/socketService';
 import { getStoredKeys, clearKeys } from './crypto/keyManager';
 import { clearAllData } from './services/storageService';
 import { UpdateManager } from './components/UpdateManager';
 import { platform, notifyUpdateReady } from './services/platformService';
+import { initPushNotifications } from './services/pushService';
 import React, { Component } from 'react';
 import './styles/index.css';
 
@@ -81,10 +82,17 @@ function AppContent() {
 
         // Register with server
         const storedUsername = localStorage.getItem('decentrachat_username');
-        await register(address, keys.publicKey, storedUsername);
+        const storedAvatar = localStorage.getItem('decentrachat_avatar') || undefined;
+        const storedStatus = localStorage.getItem('decentrachat_status') || undefined;
+        await register(address, keys.publicKey, storedUsername, storedAvatar, storedStatus);
 
         if (mounted) {
           setIsSocketReady(true);
+          
+          // Setup push notifications
+          initPushNotifications((token) => {
+              updatePushToken(token);
+          });
 
           // Check if we need to show username setup
           if (!storedUsername) {

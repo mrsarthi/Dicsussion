@@ -23,7 +23,10 @@ import {
     emitCreateGroup,
     emitDeleteGroup,
     onGroupCreated,
-    onGroupDeleted
+    onGroupDeleted,
+    emitReaction,
+    onReaction,
+    updateProfile as updateSocketProfile
 } from '../services/socketService';
 import {
     saveMessage,
@@ -42,6 +45,10 @@ export function useChat(myAddress) {
     const [error, setError] = useState(null);
     const [connectionType, setConnectionType] = useState('offline');
     const [serverConnected, setServerConnected] = useState(false);
+    
+    // Profile State
+    const [myAvatar, setMyAvatar] = useState(() => localStorage.getItem('decentrachat_avatar') || null);
+    const [myStatus, setMyStatus] = useState(() => localStorage.getItem('decentrachat_status') || null);
 
     const activeChatRef = useRef(null);
     const keysRef = useRef(null);
@@ -160,6 +167,61 @@ export function useChat(myAddress) {
         }
         console.log(`👤 Removed ${memberAddress.slice(0, 10)} from group ${groupId}`);
     }, [myAddress, deleteGroup]);
+
+    // ====== REACTIONS ======
+
+    // Helper: apply a reaction mutation to a messages array
+    const applyReaction = (msgs, messageId, emoji, from, action) => {
+        return msgs.map(m => {
+            if (m.id !== messageId) return m;
+            const reactions = { ...(m.reactions || {}) };
+            const list = [...(reactions[emoji] || [])];
+            const idx = list.findIndex(a => a.toLowerCase() === from.toLowerCase());
+
+            if (action === 'add' && idx === -1) {
+                list.push(from);
+            } else if (action === 'remove' && idx !== -1) {
+                list.splice(idx, 1);
+            }
+
+            if (list.length > 0) {
+                reactions[emoji] = list;
+            } else {
+                delete reactions[emoji];
+            }
+            return { ...m, reactions };
+        });
+    };
+
+    const toggleReaction = useCallback(async (messageId, emoji) => {
+        if (!messageId || !emoji || !myAddress) return;
+
+        // Check if we already reacted with this emoji
+        const msg = messages.find(m => m.id === messageId);
+        if (!msg) return;
+        const existing = (msg.reactions?.[emoji] || []);
+        const alreadyReacted = existing.some(a => a.toLowerCase() === myAddress.toLowerCase());
+        const action = alreadyReacted ? 'remove' : 'add';
+
+        // Update local state immediately
+        setMessages(prev => applyReaction(prev, messageId, emoji, myAddress, action));
+
+        // Persist the updated message to storage
+        const chatId = activeChatRef.current?.address;
+        if (chatId) {
+            const updated = applyReaction([msg], messageId, emoji, myAddress, action)[0];
+            await saveMessage(chatId, updated);
+        }
+
+        // Emit to server
+        const ac = activeChatRef.current;
+        if (ac?.isGroup) {
+            emitReaction(messageId, emoji, action, null, ac.address, ac.members);
+        } else {
+            const to = ac?.address;
+            emitReaction(messageId, emoji, action, to, null, null);
+        }
+    }, [messages, myAddress]);
 
     const sendTyping = useCallback((isTyping) => {
         if (!activeChat || !myAddress) return;
@@ -440,6 +502,31 @@ export function useChat(myAddress) {
                 }
             });
 
+            // Listen for incoming reactions from other participants
+            onReaction((data) => {
+                const { messageId, emoji, from, action } = data;
+                if (!messageId || !emoji || !from) return;
+
+                // Update messages state if we have this message loaded
+                setMessages(prev => {
+                    const hasMsg = prev.some(m => m.id === messageId);
+                    if (!hasMsg) return prev;
+                    return applyReaction(prev, messageId, emoji, from, action || 'add');
+                });
+
+                // Persist to storage
+                const chatId = activeChatRef.current?.address;
+                if (chatId) {
+                    getLocalHistory(chatId).then(history => {
+                        const msg = history.find(m => m.id === messageId);
+                        if (msg) {
+                            const updated = applyReaction([msg], messageId, emoji, from, action || 'add')[0];
+                            saveMessage(chatId, updated);
+                        }
+                    });
+                }
+            });
+
             // ... (rest of init - receipts, connection, status) ...
             // Copying existing receipt/connection logic...
             onMessageReceipt(({ messageId, type }) => {
@@ -452,23 +539,40 @@ export function useChat(myAddress) {
                 // ... sync status logic ...
             });
 
-            statusUnsubscribeRef.current = onUserStatus(({ address, online, lastSeen }) => {
+            // Listen for user status updates (online/offline)
+            statusUnsubscribeRef.current = onUserStatus((data) => {
+                const { address: userAddr, online, lastSeen, avatar, status } = data;
+                
                 // Update contacts
                 setContacts(prev => prev.map(c => {
-                    if (!c.isGroup && c.address.toLowerCase() === address.toLowerCase()) {
-                        return { ...c, online, lastSeen };
+                    if (!c.isGroup && c.address.toLowerCase() === userAddr.toLowerCase()) {
+                        return { 
+                            ...c, 
+                            online, 
+                            lastSeen,
+                            ...(avatar !== undefined && { avatar }),
+                            ...(status !== undefined && { status })
+                        };
                     }
                     return c;
                 }));
-                if (activeChatRef.current?.address?.toLowerCase() === address.toLowerCase()) {
-                    setActiveChat(prev => ({ ...prev, info: { ...prev.info, online, lastSeen } }));
+                
+                // Update active chat info if viewing that user
+                if (activeChatRef.current?.address?.toLowerCase() === userAddr.toLowerCase() && !activeChatRef.current.isGroup) {
+                    setActiveChat(prev => ({ 
+                        ...prev, 
+                        online, 
+                        lastSeen,
+                        ...(avatar !== undefined && { avatar }),
+                        ...(status !== undefined && { status })
+                    }));
                 }
 
                 // When a contact comes online, flush any queued messages for them
                 if (online && myAddress) {
-                    flushPendingMessages(myAddress, ({ id, status }) => {
+                    flushPendingMessages(myAddress, ({ id, msgStatus }) => {
                         setMessages(prev => prev.map(m =>
-                            m.id === id ? { ...m, status, transport: 'relay' } : m
+                            m.id === id ? { ...m, status: msgStatus, transport: 'relay' } : m
                         ));
                     }).catch(err => console.debug('Flush on status change failed:', err));
                 }
@@ -783,6 +887,23 @@ export function useChat(myAddress) {
         }
     }, [contacts]);
 
+    const saveProfile = useCallback((newAvatar, newStatus) => {
+        if (newAvatar !== undefined) {
+            if (newAvatar === null) localStorage.removeItem('decentrachat_avatar');
+            else localStorage.setItem('decentrachat_avatar', newAvatar);
+            setMyAvatar(newAvatar);
+        }
+        if (newStatus !== undefined) {
+            if (newStatus === null) localStorage.removeItem('decentrachat_status');
+            else localStorage.setItem('decentrachat_status', newStatus);
+            setMyStatus(newStatus);
+        }
+        updateSocketProfile(
+            newAvatar !== undefined ? newAvatar : myAvatar,
+            newStatus !== undefined ? newStatus : myStatus
+        );
+    }, [myAvatar, myStatus]);
+
     const closeChat = useCallback(() => {
         setActiveChat(null);
         setMessages([]);
@@ -809,6 +930,10 @@ export function useChat(myAddress) {
         deleteGroup,
         removeMember,
         searchAndAddContact,
+        toggleReaction,
+        myAvatar,
+        myStatus,
+        saveProfile,
         clearError: () => setError(null),
     };
 }

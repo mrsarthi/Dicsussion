@@ -65,6 +65,10 @@ Thumbs.db
 *.jks
 *.keystore
 
+# Firebase Push Notification Secrets
+server/serviceAccountKey.json
+android/app/google-services.json
+
 # Linter Caches
 .eslintcache
 .stylelintcache

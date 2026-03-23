@@ -24,7 +24,8 @@ try {
 // https://vite.dev/config/
 export default defineConfig({
   define: {
-    '__APP_VERSION__': JSON.stringify(packageJson.version),
+    // build.gradle is the single source of truth for version across all platforms
+    '__APP_VERSION__': JSON.stringify(androidVersion),
     '__ANDROID_VERSION__': JSON.stringify(androidVersion),
   },
   plugins: [

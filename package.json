@@ -1,7 +1,7 @@
 {
   "name": "decentrachat",
   "private": true,
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "Decentralized end-to-end encrypted messaging app with blockchain identity",
   "author": "DecentraChat",
   "main": "electron/main.js",
@@ -74,6 +74,7 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/haptics": "^8.0.1",
     "@capacitor/keyboard": "^8.0.1",
+    "@capacitor/push-notifications": "^8.0.2",
     "@capacitor/status-bar": "^8.0.1",
     "electron-updater": "^6.7.3",
     "ethers": "^6.16.0",

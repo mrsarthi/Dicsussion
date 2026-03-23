@@ -6,6 +6,57 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 
 const path = require('path');
+const admin = require('firebase-admin');
+
+// Initialize Firebase Admin for Push Notifications
+let fcmReady = false;
+try {
+    const serviceAccount = require('./serviceAccountKey.json');
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    fcmReady = true;
+    console.log('[Firebase] Push notifications initialized successfully.');
+} catch (err) {
+    console.warn('[Firebase] Warning: serviceAccountKey.json not found or invalid. Push notifications are disabled.');
+}
+
+// Helper: Send Push Notification
+async function pushOfflineNotification(toAddress, payload, type) {
+    if (!fcmReady) return;
+    const user = users.get(toAddress.toLowerCase());
+    if (user && user.pushToken) {
+        try {
+            let title = 'DecentraChat';
+            let body = 'You have a new notification';
+            
+            const senderName = users.get(payload.from)?.username || payload.from.slice(0, 6);
+            
+            if (type === 'dm') {
+                title = `New message from ${senderName}`;
+                body = 'Sent you a message'; // Keep content private in notifications
+            } else if (type === 'group') {
+                title = `New group message`;
+                body = `${senderName} sent a message`;
+            } else if (type === 'reaction') {
+                title = `New reaction`;
+                body = `${senderName} reacted to a message`;
+            } else if (type === 'groupCreated') {
+                title = `Added to a group`;
+                body = `${senderName} added you to a group`;
+            }
+            
+            await admin.messaging().send({
+                token: user.pushToken,
+                notification: { title, body },
+                android: { priority: 'high' }
+            });
+            console.log(`[Firebase] Push sent to ${toAddress.slice(0, 8)}`);
+        } catch (err) {
+            console.error('[Firebase] Failed to send push:', err.message);
+        }
+    }
+}
 
 const app = express();
 app.use(cors());
@@ -118,12 +169,16 @@ io.on('connection', (socket) => {
     socket.on('leave_auth_room', ({ sessionId }) => {
         socket.leave(`auth_${sessionId}`);
     });
-    socket.on('register', ({ address, publicKey, username }) => {
+    socket.on('register', ({ address, publicKey, username, avatar, status }) => {
         const normalizedAddress = address.toLowerCase();
 
         // Get existing username for this user if any
         const existingUser = users.get(normalizedAddress);
         const existingUsername = existingUser?.username || username;
+        
+        // Use incoming avatar/status or preserve existing ones
+        const finalAvatar = avatar !== undefined ? avatar : existingUser?.avatar;
+        const finalStatus = status !== undefined ? status : existingUser?.status;
 
         // Store user info
         users.set(normalizedAddress, {
@@ -131,7 +186,9 @@ io.on('connection', (socket) => {
             publicKey,
             online: true,
             lastSeen: Date.now(),
-            username: existingUsername
+            username: existingUsername,
+            avatar: finalAvatar,
+            status: finalStatus
         });
 
         // Also add to usernames lookup map if username exists
@@ -159,14 +216,13 @@ io.on('connection', (socket) => {
             // Small delay to ensure client-side handlers are fully set up
             setTimeout(() => {
                 pending.forEach(msg => {
-                    if (msg._isGroupCreated) {
-                        // Deliver as groupCreated event
+                    if (msg._isReaction) {
+                        socket.emit('messageReaction', msg);
+                    } else if (msg._isGroupCreated) {
                         socket.emit('groupCreated', msg);
                     } else if (msg._isGroupDeleted) {
-                        // Deliver as groupDeleted event
                         socket.emit('groupDeleted', msg);
                     } else if (msg._isGroupMessage) {
-                        // Deliver as groupMessage event
                         socket.emit('groupMessage', msg);
                     } else {
                         socket.emit('message', msg);
@@ -180,8 +236,40 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('userStatus', {
             address: normalizedAddress,
             online: true,
-            lastSeen: Date.now()
+            lastSeen: Date.now(),
+            avatar: finalAvatar,
+            status: finalStatus
         });
+    });
+
+    socket.on('updateProfile', ({ avatar, status }) => {
+        if (!socket.address) return;
+        const address = socket.address;
+        const user = users.get(address);
+        if (user) {
+            if (avatar !== undefined) user.avatar = avatar;
+            if (status !== undefined) user.status = status;
+            users.set(address, user);
+            
+            // Broadcast the profile update to everyone
+            socket.broadcast.emit('userStatus', {
+                address: address,
+                online: true,
+                lastSeen: user.lastSeen || Date.now(),
+                avatar: user.avatar,
+                status: user.status
+            });
+        }
+    });
+
+    socket.on('updatePushToken', ({ token }) => {
+        if (!socket.address) return;
+        const user = users.get(socket.address);
+        if (user) {
+            user.pushToken = token;
+            users.set(socket.address, user);
+            console.log(`📱 Push token updated for ${socket.address.slice(0, 8)}: ${token.slice(0, 10)}...`);
+        }
     });
 
     // Set username for a user
@@ -291,6 +379,7 @@ io.on('connection', (socket) => {
             offlineMessages.set(toAddress, pending);
             socket.emit('messageStatus', { id: fullMessage.id, status: 'stored' });
             console.log(`[📦] Message stored for offline: ${toAddress.slice(0, 6)}`);
+            pushOfflineNotification(toAddress, fullMessage, 'dm');
         }
 
         // Send back to sender for confirmation
@@ -332,6 +421,7 @@ io.on('connection', (socket) => {
                 pending.push({ ...fullMessage, _isGroupMessage: true });
                 offlineMessages.set(toAddress, pending);
                 queuedCount++;
+                pushOfflineNotification(toAddress, fullMessage, 'group');
             }
         });
 
@@ -468,6 +558,7 @@ io.on('connection', (socket) => {
                 pending.push({ ...payload, _isGroupCreated: true });
                 offlineMessages.set(toAddress, pending);
                 queuedCount++;
+                pushOfflineNotification(toAddress, payload, 'groupCreated');
             }
         });
 
@@ -508,6 +599,40 @@ io.on('connection', (socket) => {
         });
 
         console.log(`[👥-] Group deleted ${groupId?.slice(0, 8)}: ${deliveredCount} notified, ${queuedCount} queued`);
+    });
+
+    // React to a message — relay to recipient(s)
+    socket.on('messageReaction', (data) => {
+        const { messageId, emoji, action, to, groupId, members } = data;
+        if (!messageId || !emoji) return;
+
+        const payload = {
+            messageId,
+            emoji,
+            action: action || 'add',
+            from: socket.address,
+            groupId: groupId || null,
+            timestamp: Date.now()
+        };
+
+        // Determine targets: group → all members, DM → single recipient
+        const targets = groupId && Array.isArray(members) ? members : (to ? [to] : []);
+
+        targets.forEach(addr => {
+            const toAddress = addr.toLowerCase();
+            if (toAddress === socket.address) return; // Skip self
+
+            const recipient = users.get(toAddress);
+
+            if (recipient && recipient.online) {
+                io.to(recipient.socketId).emit('messageReaction', payload);
+            } else {
+                const pending = offlineMessages.get(toAddress) || [];
+                pending.push({ ...payload, _isReaction: true });
+                offlineMessages.set(toAddress, pending);
+                pushOfflineNotification(toAddress, payload, 'reaction');
+            }
+        });
     });
 
     // Disconnect handling

@@ -16,6 +16,7 @@ let wasDisconnected = false; // Track if we were previously disconnected
 let activeAuthSessionId = null; // Track active auth relay session to handle reconnections
 let groupCreatedCallback = null;
 let groupDeletedCallback = null;
+let reactionCallback = null;
 
 /**
  * Initialize socket connection
@@ -140,6 +141,10 @@ export function initSocket() {
         if (groupDeletedCallback) groupDeletedCallback(data);
     });
 
+    socket.on('messageReaction', (data) => {
+        if (reactionCallback) reactionCallback(data);
+    });
+
     return socket;
 }
 
@@ -148,16 +153,19 @@ export function initSocket() {
 
 
 /**
- * Register user with the server
- * @param {string} address - Wallet address
- * @param {string} publicKey - Encryption public key
- * @param {string} username - Optional username
+ * Send static registration data to the server (pub key, username, etc)
+ * @param {string} address User's wallet address
+ * @param {string} publicKey User's public key for encryption
+ * @param {string} [username] Optional username
+ * @param {string} [avatar] Optional base64 avatar
+ * @param {string} [status] Optional status text
+ * @returns {Promise<{address: string, username?: string}>}
  */
-export function register(address, publicKey, username = null) {
+export function register(address, publicKey, username, avatar, status) {
     if (!socket) initSocket();
 
-    // specific current user
-    currentUser = { address, publicKey, username };
+    // Store credentials so they persist across socket disconnects/reconnects
+    currentUser = { address, publicKey, username, avatar, status };
 
     return new Promise((resolve, reject) => {
         let isResolved = false;
@@ -169,7 +177,7 @@ export function register(address, publicKey, username = null) {
             }
         }, 15000);
 
-        socket.emit('register', { address, publicKey, username });
+        socket.emit('register', { address, publicKey, username, avatar, status });
         socket.once('registered', (data) => {
             isResolved = true;
             clearTimeout(timeout);
@@ -373,6 +381,21 @@ export function onGroupDeleted(callback) {
 }
 
 /**
+ * Emit a reaction event to the server
+ */
+export function emitReaction(messageId, emoji, action, to, groupId, members) {
+    if (!socket?.connected) return;
+    socket.emit('messageReaction', { messageId, emoji, action, to, groupId, members });
+}
+
+/**
+ * Subscribe to incoming reaction events
+ */
+export function onReaction(callback) {
+    reactionCallback = callback;
+}
+
+/**
  * Get user info from server
  * @param {string} address
  */
@@ -402,6 +425,48 @@ export function checkOnline(address) {
             resolve(online);
         });
     });
+}
+
+/**
+ * Check if user is online
+ * @param {string} address
+ */
+export function checkUsernameAvailability(username) {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ available: false, error: 'Offline' });
+            return;
+        }
+        socket.emit('checkUsername', { username }, (response) => {
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Update the user's avatar and status
+ * @param {string} avatar Base64 image string or URL
+ * @param {string} status Status tagline
+ */
+export function updateProfile(avatar, status) {
+    if (!socket?.connected) return;
+    
+    // Update our saved credentials for reconnections
+    if (currentUser) {
+        currentUser.avatar = avatar;
+        currentUser.status = status;
+    }
+    
+    socket.emit('updateProfile', { avatar, status });
+}
+
+/**
+ * Update the user's push notification token
+ * @param {string} token FCM token from Capacitor
+ */
+export function updatePushToken(token) {
+    if (!socket?.connected) return;
+    socket.emit('updatePushToken', { token });
 }
 
 /**

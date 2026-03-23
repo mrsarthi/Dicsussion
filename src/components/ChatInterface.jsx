@@ -4,6 +4,7 @@ import { useChat } from '../hooks/useChat';
 import { formatAddress } from '../blockchain/web3Provider';
 import { CreateGroupModal } from './CreateGroupModal';
 import { GroupDetailsModal } from './GroupDetailsModal';
+import { ProfileModal } from './ProfileModal';
 import { SettingsModal } from './SettingsModal';
 import { App as CapacitorApp } from '@capacitor/app';
 import { platform } from '../services/platformService';
@@ -29,7 +30,11 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
         deleteGroup,
         removeMember,
         searchAndAddContact,
+        toggleReaction,
         clearError,
+        myAvatar,
+        myStatus,
+        saveProfile
     } = useChat(walletAddress);
 
     const [newMessage, setNewMessage] = useState('');
@@ -42,10 +47,15 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
     const [imagePreview, setImagePreview] = useState(null); // base64 data URL
     const [lightboxImage, setLightboxImage] = useState(null);
     const [showSettings, setShowSettings] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [reactionPickerMsgId, setReactionPickerMsgId] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
     const fileInputRef = useRef(null);
     const typingTimeoutRef = useRef(null);
+    const longPressTimerRef = useRef(null);
+
+    const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
@@ -62,7 +72,16 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                 setLightboxImage(null);
                 return;
             }
-            // Priority 2: Modals open
+            // Priority 2: Reaction picker open
+            if (reactionPickerMsgId) {
+                setReactionPickerMsgId(null);
+                return;
+            }
+            // Priority 3: Modals open
+            if (showProfileModal) {
+                setShowProfileModal(false);
+                return;
+            }
             if (showSettings) {
                 setShowSettings(false);
                 return;
@@ -91,7 +110,7 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
         return () => {
             backListener.then(listener => listener.remove());
         };
-    }, [lightboxImage, showSettings, showGroupDetails, showGroupModal, activeChat, closeChat]);
+    }, [lightboxImage, reactionPickerMsgId, showProfileModal, showSettings, showGroupDetails, showGroupModal, activeChat, closeChat]);
 
     const handleSend = async (e) => {
         e.preventDefault();
@@ -256,6 +275,17 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                     onCreate={createGroup}
                 />
             )}
+            
+            {showProfileModal && (
+                <ProfileModal
+                    walletAddress={walletAddress}
+                    username={username}
+                    currentAvatar={myAvatar}
+                    currentStatus={myStatus}
+                    onSave={saveProfile}
+                    onClose={() => setShowProfileModal(false)}
+                />
+            )}
 
             {/* Sidebar */}
             <aside className="sidebar glass-card">
@@ -263,22 +293,25 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                     <div className="sidebar-header-top">
                         <h2>Chats</h2>
                         {walletAddress && (
-                            <div className="user-profile-badge" onClick={() => {
-                                try {
-                                    navigator.clipboard.writeText(walletAddress);
-                                    alert('Address copied to clipboard! 📋');
-                                } catch (err) {
-                                    console.error(err);
-                                }
-                            }} title="Copy your address">
-                                <div className="avatar avatar-sm">
-                                    {(username && username.length > 1) ? username.replace('@', '')[0]?.toUpperCase() : (walletAddress ? walletAddress.slice(2, 4).toUpperCase() : 'U')}
+                            <div className="user-profile-badge" onClick={() => setShowProfileModal(true)} title="Profile Settings" style={{ cursor: 'pointer' }}>
+                                <div className="avatar avatar-sm" style={{ overflow: 'hidden' }}>
+                                    {myAvatar ? (
+                                        <img src={myAvatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                        (username && username.length > 1) ? username.replace('@', '')[0]?.toUpperCase() : (walletAddress ? walletAddress.slice(2, 4).toUpperCase() : 'U')
+                                    )}
                                 </div>
                                 <div className="user-profile-info">
                                     <span className="user-profile-name">{username || 'Anonymous'}</span>
-                                    <span className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : ''} 📋
-                                    </span>
+                                    {myStatus ? (
+                                        <span className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: '4px', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {myStatus}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : ''} ⚙️
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -334,8 +367,12 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                     className={`contact-item ${activeChat?.address === contact.address ? 'active' : ''}`}
                                     onClick={() => openChat(contact.address)}
                                 >
-                                    <div className="avatar">
-                                        {contact.isGroup ? '👥' : contact.address.slice(2, 4).toUpperCase()}
+                                    <div className="avatar" style={{ overflow: 'hidden' }}>
+                                        {contact.isGroup ? '👥' : (
+                                            contact.avatar ? (
+                                                <img src={contact.avatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : contact.address.slice(2, 4).toUpperCase()
+                                        )}
                                     </div>
                                     <div className="contact-info">
                                         <span className="contact-name">
@@ -343,8 +380,8 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                         </span>
                                         <div className="contact-status-row">
                                             {contact.username && !contact.isGroup && (
-                                                <span className="text-xs text-muted">
-                                                    {formatAddress(contact.address)}
+                                                <span className="text-xs text-muted" style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {contact.status || formatAddress(contact.address)}
                                                 </span>
                                             )}
                                             {contact.isGroup && (
@@ -420,8 +457,12 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                 onClick={() => activeChat.isGroup && setShowGroupDetails(true)}
                                 title={activeChat.isGroup ? "View Group Details" : ""}
                             >
-                                <div className="avatar">
-                                    {activeChat.isGroup ? '👥' : activeChat.address.slice(2, 4).toUpperCase()}
+                                <div className="avatar" style={{ overflow: 'hidden' }}>
+                                    {activeChat.isGroup ? '👥' : (
+                                        activeChat.info?.avatar ? (
+                                            <img src={activeChat.info.avatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ) : activeChat.address.slice(2, 4).toUpperCase()
+                                    )}
                                 </div>
                                 <div className="chat-header-details">
                                     <span className="chat-header-name">
@@ -435,10 +476,10 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                     ) : (
                                         <div className="chat-status-line">
                                             <span className={`status-indicator ${activeChat.info?.online ? 'online' : 'offline'}`}></span>
-                                            <span className="status-text">
+                                            <span className="status-text" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {activeChat.isGroup
                                                     ? `${activeChat.info?.members?.length || 0} members`
-                                                    : (activeChat.info?.online ? 'Online' : 'Away')
+                                                    : (activeChat.info?.online ? (activeChat.info?.status || 'Online') : 'Away')
                                                 }
                                             </span>
                                             <span className="encrypted-badge">
@@ -490,9 +531,38 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                             } ${msg.decryptionFailed ? 'failed' : ''}`}
                                     >
                                         <div
-                                            className="message-bubble"
+                                        className="message-bubble"
                                             onDoubleClick={() => handleReply(msg)}
+                                            onTouchStart={(e) => {
+                                                longPressTimerRef.current = setTimeout(() => {
+                                                    setReactionPickerMsgId(msg.id);
+                                                }, 500);
+                                            }}
+                                            onTouchEnd={() => clearTimeout(longPressTimerRef.current)}
+                                            onTouchMove={() => clearTimeout(longPressTimerRef.current)}
+                                            onContextMenu={(e) => {
+                                                e.preventDefault();
+                                                setReactionPickerMsgId(msg.id);
+                                            }}
                                         >
+                                            {/* Emoji reaction picker */}
+                                            {reactionPickerMsgId === msg.id && (
+                                                <div className={`reaction-picker ${msg.from?.toLowerCase() === walletAddress?.toLowerCase() ? 'sent' : 'received'}`}>
+                                                    {QUICK_EMOJIS.map(emoji => (
+                                                        <button
+                                                            key={emoji}
+                                                            className="reaction-picker-emoji"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleReaction(msg.id, emoji);
+                                                                setReactionPickerMsgId(null);
+                                                            }}
+                                                        >
+                                                            {emoji}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
                                             {/* Show sender name in group chats if received */}
                                             {activeChat.isGroup && msg.from?.toLowerCase() !== walletAddress?.toLowerCase() && (
                                                 <div className="text-xs opacity-75 font-bold mb-1" style={{ color: 'var(--accent-secondary)' }}>
@@ -548,6 +618,22 @@ export function ChatInterface({ walletAddress, username, onDeleteAccount }) {
                                                 )}
                                             </div>
                                         </div>
+                                        {/* Reaction pills below the bubble */}
+                                        {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                                            <div className={`reaction-pills ${msg.from?.toLowerCase() === walletAddress?.toLowerCase() ? 'sent' : 'received'}`}>
+                                                {Object.entries(msg.reactions).map(([emoji, users]) => (
+                                                    <button
+                                                        key={emoji}
+                                                        className={`reaction-pill ${users.some(u => u.toLowerCase() === walletAddress?.toLowerCase()) ? 'mine' : ''}`}
+                                                        onClick={() => toggleReaction(msg.id, emoji)}
+                                                        title={users.map(u => formatAddress(u)).join(', ')}
+                                                    >
+                                                        <span className="reaction-pill-emoji">{emoji}</span>
+                                                        {users.length > 1 && <span className="reaction-pill-count">{users.length}</span>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 ))
                             )}
