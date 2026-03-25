@@ -711,6 +711,7 @@ export function useChat(myAddress) {
         };
         window.addEventListener('focus', handleFocus);
 
+
         return () => {
             mounted = false;
             window.removeEventListener('focus', handleFocus);
@@ -720,6 +721,24 @@ export function useChat(myAddress) {
             Object.values(typingTimeoutRef.current).forEach(t => clearTimeout(t));
         };
     }, [myAddress]);
+    useEffect(() => {
+        if (!activeChatRef.current || activeChatRef.current.isGroup) return;
+
+        setContacts(prev => {
+            const hasUnread = prev.some(c => 
+                c.address.toLowerCase() === activeChatRef.current.address.toLowerCase() && c.unreadCount > 0
+            );
+
+            if (hasUnread) {
+                return prev.map(c => 
+                    c.address.toLowerCase() === activeChatRef.current.address.toLowerCase()
+                        ? { ...c, unreadCount: 0 }
+                        : c
+                );
+            }
+            return prev;
+        });
+    }, [messages, activeChat]);
 
     // ... (UseEffect for updates remains similar) ...
 
@@ -805,13 +824,12 @@ export function useChat(myAddress) {
         }
 
         if (contact) {
-            // Mark as read
-            const updatedContacts = contacts.map(c =>
+            // Mark as read immediately utilizing a functional update to prevent stale closure resurrections
+            setContacts(prev => prev.map(c =>
                 c.address.toLowerCase() === address.toLowerCase()
                     ? { ...c, unreadCount: 0 }
                     : c
-            );
-            setContacts(updatedContacts);
+            ));
         }
 
         // Set active
@@ -837,7 +855,17 @@ export function useChat(myAddress) {
                 const serverHistory = await getHistory(address);
                 // Merge and deduplicate
                 const existingIds = new Set(merged.map(m => m.id));
-                const newServerMsgs = serverHistory.filter(m => !existingIds.has(m.id));
+                const newServerMsgsRaw = serverHistory.filter(m => !existingIds.has(m.id));
+                
+                // CRITICAL: Decrypt the server messages before merging them into active state!
+                // Otherwise oversized un-cached payloads (like images) render as blank encrypted lock emojis.
+                const { decryptReceivedMessage } = await import('../services/messageService');
+                const newServerMsgs = [];
+                for (const msg of newServerMsgsRaw) {
+                    const decrypted = await decryptReceivedMessage(msg, keysRef.current, myAddress);
+                    newServerMsgs.push(decrypted);
+                }
+
                 merged = [...merged, ...newServerMsgs].sort((a, b) => {
                     // Sort by savedAt (local device time) to avoid cross-device clock skew
                     const aTime = a.savedAt || a.timestamp;
