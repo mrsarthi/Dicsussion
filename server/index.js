@@ -514,12 +514,16 @@ io.on('connection', (socket) => {
                 if (user) {
                     statuses[normalized] = {
                         online: user.online,
-                        lastSeen: user.lastSeen
+                        lastSeen: user.lastSeen,
+                        avatar: user.avatar,
+                        status: user.status
                     };
                 } else {
                     statuses[normalized] = {
                         online: false,
-                        lastSeen: null
+                        lastSeen: null,
+                        avatar: null,
+                        status: null
                     };
                 }
             });
@@ -535,7 +539,9 @@ io.on('connection', (socket) => {
                 address: address.toLowerCase(),
                 publicKey: user.publicKey,
                 online: user.online,
-                lastSeen: user.lastSeen
+                lastSeen: user.lastSeen,
+                avatar: user.avatar,
+                status: user.status
             });
         } else {
             callback(null);

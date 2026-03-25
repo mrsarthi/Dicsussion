@@ -11,7 +11,8 @@ import {
     sendTypingStatus,
     onTypingStatus,
     searchUser,
-    flushPendingMessages
+    flushPendingMessages,
+    getUsersStatus
 } from '../services/messageService';
 import { getStoredKeys } from '../crypto/keyManager';
 import {
@@ -27,7 +28,8 @@ import {
     emitReaction,
     onReaction,
     updateProfile as updateSocketProfile,
-    fetchOfflineMessages
+    fetchOfflineMessages,
+    ackOfflineMessages
 } from '../services/socketService';
 import {
     saveMessage,
@@ -253,6 +255,25 @@ export function useChat(myAddress) {
             const cachedContacts = await getSavedContacts();
             if (mounted && cachedContacts.length > 0) {
                 setContacts(cachedContacts);
+                
+                // Fetch latest online/avatar data for all loaded contacts
+                const addresses = cachedContacts.map(c => c.address);
+                getUsersStatus(addresses).then(statuses => {
+                    if (!mounted) return;
+                    setContacts(prev => prev.map(c => {
+                        const statusObj = statuses[c.address.toLowerCase()];
+                        if (statusObj) {
+                            return { 
+                                ...c, 
+                                online: statusObj.online, 
+                                lastSeen: statusObj.lastSeen,
+                                ...(statusObj.avatar !== undefined && statusObj.avatar !== null && { avatar: statusObj.avatar }),
+                                ...(statusObj.status !== undefined && statusObj.status !== null && { status: statusObj.status })
+                            };
+                        }
+                        return c;
+                    }));
+                }).catch(err => console.debug('Failed to sync initial contact statuses', err));
             }
 
             const keys = await getStoredKeys();
