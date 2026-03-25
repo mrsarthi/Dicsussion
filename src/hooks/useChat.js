@@ -325,8 +325,8 @@ export function useChat(myAddress) {
                 // Send delivery receipt (only for DMs to avoid storm)
                 if (!msg.groupId && msg.from && msg.from.toLowerCase() !== myAddress.toLowerCase()) {
                     sendDeliveryReceipt(msg.from, msg.id);
-                    // Only send read receipt if window is focused AND this chat is open
-                    if (document.hasFocus() && activeChatRef.current?.address?.toLowerCase() === msg.from.toLowerCase()) {
+                    // Check if chat is actively open
+                    if (activeChatRef.current?.address?.toLowerCase() === msg.from.toLowerCase()) {
                         sendReadReceipt(msg.from, msg.id);
                     }
                 }
@@ -541,8 +541,15 @@ export function useChat(myAddress) {
 
             // ... (rest of init - receipts, connection, status) ...
             // Copying existing receipt/connection logic...
-            onMessageReceipt(({ messageId, type }) => {
+            onMessageReceipt(({ messageId, type, from }) => {
                 setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status: type } : m));
+                
+                // Persist the receipt into storage so it survives app restarts
+                if (from && messageId) {
+                    import('../services/storageService').then(s => {
+                         s.updateMessageStatus(from, [messageId], type).catch(err => console.debug('Failed updating receipt:', err));
+                    });
+                }
             });
 
             onConnectionChange(async (isConnected) => {
@@ -656,7 +663,6 @@ export function useChat(myAddress) {
                                                 if (c.address.toLowerCase() === contact.address.toLowerCase()) {
                                                     return {
                                                         ...c,
-                                                        unreadCount: isActiveChat ? 0 : (c.unreadCount || 0) + incomingCount,
                                                         lastMessageTime: Math.max(c.lastMessageTime || 0, ...newMsgs.map(m => m.timestamp))
                                                     };
                                                 }
@@ -890,10 +896,16 @@ export function useChat(myAddress) {
                 merged = merged.filter(m => !m.groupId);
             }
 
-            setMessages(merged.map(m => ({
-                ...m,
-                status: 'read'
-            })));
+            setMessages(merged.map(m => {
+                // Send explicit read receipts for missed messages that we are now opening
+                if (m.from?.toLowerCase() === address.toLowerCase() && m.status !== 'read') {
+                    sendReadReceipt(m.from, m.id);
+                }
+                return {
+                    ...m,
+                    status: 'read'
+                };
+            }));
         } catch (err) {
             console.error('Error loading chat:', err);
         } finally {

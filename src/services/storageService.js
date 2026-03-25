@@ -78,6 +78,38 @@ export async function saveMessage(chatId, message) {
 }
 
 /**
+ * Update the status of existing messages in local history
+ * @param {string} chatId 
+ * @param {Array<string>} messageIds 
+ * @param {string} status ('delivered' | 'read')
+ */
+export async function updateMessageStatus(chatId, messageIds, status) {
+    if (!chatId || !messageIds || messageIds.length === 0) return;
+    const key = `chat_${chatId.toLowerCase()}`;
+
+    return getMutex(key).lock(async () => {
+        try {
+            const history = (await messageStore.getItem(key)) || [];
+            let updated = false;
+
+            const newHistory = history.map(m => {
+                if (messageIds.includes(m.id)) {
+                    updated = true;
+                    return { ...m, status };
+                }
+                return m;
+            });
+
+            if (updated) {
+                await messageStore.setItem(key, newHistory);
+            }
+        } catch (err) {
+            console.error('Failed to update message status:', err);
+        }
+    });
+}
+
+/**
  * Get local history for a chat
  * @param {string} chatId
  * @returns {Promise<Array>}
