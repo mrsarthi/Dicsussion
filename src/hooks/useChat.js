@@ -819,7 +819,8 @@ export function useChat(myAddress) {
                     activeChat.address,
                     content,
                     replyTo,
-                    { type: type }
+                    { type: type },
+                    activeChat.publicKey // Inject caller-level fallback key
                 );
                 await saveMessage(activeChat.address, sentMessage); // Persist
                 setMessages(prev => [...prev, sentMessage]);

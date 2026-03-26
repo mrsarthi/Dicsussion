@@ -3,7 +3,7 @@ import { encryptMessage, decryptMessage } from '../crypto/crypto';
 import { getStoredKeys } from '../crypto/keyManager';
 import * as socketService from './socketService';
 import * as webrtcService from './webrtcService';
-import { savePendingMessage, getPendingMessages, removePendingMessage } from './storageService';
+import { savePendingMessage, getPendingMessages, removePendingMessage, getLocalHistory } from './storageService';
 
 
 // Track sent message IDs for deduplication
@@ -36,9 +36,11 @@ export async function registerUser(address, publicKey) {
  * @param {string} recipientAddress - Recipient's wallet address
  * @param {string} plainText - The message content
  * @param {Object} replyTo - Optional reply context { id, content, senderUsername }
+ * @param {Object} metadata - Metadata (group routing, media type)
+ * @param {string} fallbackPubKey - (Optional) Pre-cached public key from device memory if server drops the user
  * @returns {Promise<Object>} The sent message object
  */
-export async function sendEncryptedMessage(senderAddress, recipientAddress, plainText, replyTo = null, metadata = {}) {
+export async function sendEncryptedMessage(senderAddress, recipientAddress, plainText, replyTo = null, metadata = {}, fallbackPubKey = null) {
     // Capture timestamp ONCE so all copies of this message share the same value
     const now = Date.now();
 
@@ -51,8 +53,34 @@ export async function sendEncryptedMessage(senderAddress, recipientAddress, plai
     // Get recipient's public key from server (Primary)
     let recipientPubKey = await socketService.getPublicKey(recipientAddress);
 
+    // Fallback 1: Caller provided a cached key from the UX contacts layer
+    if (!recipientPubKey && fallbackPubKey) {
+        recipientPubKey = fallbackPubKey;
+        console.log('🔑 Server dropped target; recovered key from caller cache');
+    }
+
+    // Fallback: If server forgot them due to memory clears (e.g. they've been offline for days)
+    // Mine our local history to see if they've ever sent us a message we can extract the key from!
     if (!recipientPubKey) {
-        // User is offline/not registered — queue message for later instead of blocking
+        try {
+            const history = await getLocalHistory(recipientAddress);
+            if (history && history.length > 0) {
+                // Find ANY past inbound message from them
+                const lastMsgFromRecipient = history.slice().reverse().find(m => 
+                    m.from?.toLowerCase() === recipientAddress.toLowerCase() && m.senderPublicKey
+                );
+                if (lastMsgFromRecipient) {
+                    recipientPubKey = lastMsgFromRecipient.senderPublicKey;
+                    console.log('🔑 Recovered offline user public key from local history cache!');
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to recover public key from local history:', err);
+        }
+    }
+
+    if (!recipientPubKey) {
+        // User is TRULY offline (not registered AND no history) — queue message for later instead of blocking
         const messageId = `msg_${now}_${Math.random().toString(36).substr(2, 9)}`;
         const senderUsername = localStorage.getItem('decentrachat_username') || null;
 

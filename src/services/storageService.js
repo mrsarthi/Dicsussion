@@ -202,6 +202,7 @@ export async function saveContacts(contacts) {
             const minimized = contacts.map(c => ({
                 address: c.address,
                 username: c.username,
+                publicKey: c.publicKey, // Required for offline messaging fallbacks
                 isGroup: c.isGroup,
                 members: c.members, // Crucial for groups
                 admins: c.admins,   // Crucial for group admin features
