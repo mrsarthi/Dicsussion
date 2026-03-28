@@ -72,3 +72,8 @@ android/app/google-services.json
 # Linter Caches
 .eslintcache
 .stylelintcache
+
+# Project Documentation & Agent Context
+Architecture.md
+Technical_Architecture.md
+.agents/
